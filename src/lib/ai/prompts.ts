@@ -34,12 +34,33 @@ export function buildDesignPrompt(
 
   if (!layoutGuide) throw new Error(`Unknown design type: ${designType}`);
 
-  // Always composite text programmatically so final copy is exact.
-  const textFree = true;
+  // Test model-rendered text for the birth announcement only.
+  // Everything else stays on the deterministic overlay path.
+  const textFree = designType !== "BABY_BIRTH_ANNOUNCEMENT";
 
   const contentPrompt = textFree
     ? buildBackgroundPrompt(layoutGuide, styleGuide, culturalGuide, ceremonyContext, suitePack, designRole, designType, languages)
-    : buildFullPrompt(layoutGuide, styleGuide, culturalGuide, ceremonyContext, suitePack, designRole, textContent, languages);
+    : designType === "BABY_BIRTH_ANNOUNCEMENT"
+      ? buildBirthAnnouncementInlineTextPrompt(
+          layoutGuide,
+          styleGuide,
+          culturalGuide,
+          ceremonyContext,
+          suitePack,
+          designRole,
+          textContent,
+          languages,
+        )
+      : buildFullPrompt(
+          layoutGuide,
+          styleGuide,
+          culturalGuide,
+          ceremonyContext,
+          suitePack,
+          designRole,
+          textContent,
+          languages,
+        );
 
   return { systemPrompt: styleGuide.systemPrompt, contentPrompt, textFree };
 }
@@ -137,6 +158,93 @@ ${culturalGuide.rules}
 Render only the exact text specified above — no additions, no placeholders.
 This asset must feel intentionally designed for its role in the ${suitePack.label}.
 `.trim();
+}
+
+function buildBirthAnnouncementInlineTextPrompt(
+  layoutGuide: { description: string; aspectRatio: string; rules: string },
+  styleGuide: { description: string; colors: string },
+  culturalGuide: { rules: string },
+  ctx: CeremonyContextResult,
+  suitePack: { label: string },
+  designRole: string,
+  textContent: Record<string, Record<string, string>>,
+  languages: string[],
+): string {
+  const exactFieldLines = [
+    renderFieldValue("babyName", "Top hero cartouche", textContent, languages),
+    renderFieldValue("birthDate", "Birth date box", textContent, languages),
+    renderFieldValue("birthTime", "Birth time box", textContent, languages),
+    renderFieldValue("weight", "Weight box", textContent, languages),
+    renderFieldValue("length", "Length box", textContent, languages),
+    renderFieldValue("parentNames", "Parents / family plaque", textContent, languages),
+    renderFieldValue("additionalInfo", "Bottom message panel", textContent, languages),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `
+Create a professional, print-ready ${layoutGuide.description} for a ${ctx.tradition || "multicultural"} ${ctx.event || "celebration"}.
+
+This is a controlled typography test. You must typeset the provided text directly into the card artwork.
+
+ASPECT RATIO: ${layoutGuide.aspectRatio}
+STYLE: ${styleGuide.description}
+COLOR PALETTE: ${styleGuide.colors}
+SUITE PACK: ${suitePack.label}
+DESIGN ROLE IN PACK: ${designRole}
+
+CEREMONY CONTEXT:
+${ctx.lines}
+
+LANGUAGES: ${languages.join(", ")}
+
+MANDATORY TEXT RULES:
+- Use the exact text strings below verbatim.
+- Do not paraphrase, translate again, correct, improve, shorten, or expand any text.
+- Do not invent placeholder labels like "babyName", "birthDate", "weight", "length", "name", or similar.
+- Do not add extra headings, blessings, captions, or decorative words unless they appear exactly in the provided text.
+- Do not recreate the text with alternate spellings. Copy the exact strings only.
+- Keep all text crisp, elegant, and fully legible inside the intended decorative frames.
+- If multiple languages are provided for the same field, stack them cleanly within the same frame with the primary language most prominent.
+
+PLACE THE EXACT TEXT IN THESE FIELDS:
+${exactFieldLines}
+
+LAYOUT INSTRUCTIONS:
+- Top hero cartouche: the baby's name only, centered and most prominent.
+- Middle four-box details panel: birth date, birth time, weight, and length in separate compartments.
+- Lower ornamental plaque: parents / family names only.
+- Bottom rectangular message panel: additional note only.
+- Leave unused frames empty if no exact text is provided for that field.
+
+LAYOUT RULES:
+${layoutGuide.rules}
+
+CULTURAL REQUIREMENTS:
+${culturalGuide.rules}
+
+This must look like a finished luxury birth announcement card, not a blank template.
+`.trim();
+}
+
+function renderFieldValue(
+  field: string,
+  label: string,
+  textContent: Record<string, Record<string, string>>,
+  languages: string[],
+): string | null {
+  const values = textContent[field];
+  if (!values) return null;
+
+  const lines = languages
+    .map((lang) => {
+      const value = values[lang];
+      return value ? `  - ${lang}: "${value}"` : null;
+    })
+    .filter(Boolean);
+
+  if (!lines.length) return null;
+  return `${label}:\n${lines.join("\n")}`;
 }
 
 // ─── Ceremony Context Helper ────────────────────────────
