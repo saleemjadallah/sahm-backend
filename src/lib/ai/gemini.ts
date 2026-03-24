@@ -126,7 +126,6 @@ export async function generateDesignImage(opts: GenerateImageOpts): Promise<Buff
             aspectRatio: (opts.aspectRatio || "1:1") as any,
             imageSize: opts.imageSize || "2K",
           },
-          thinkingConfig: { thinkingLevel: "HIGH" as any },
         },
       });
 
