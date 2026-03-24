@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { generateSuite } from "../../services/design.service.js";
-import { NotFoundError, ForbiddenError } from "../../errors/index.js";
+import { NotFoundError } from "../../errors/index.js";
 import type { ApiResponse, DesignResponse } from "../../types/index.js";
 
 const generateSuiteSchema = z.object({
@@ -39,27 +39,36 @@ export async function generateSuiteRoute(fastify: FastifyInstance) {
         });
       }
 
-      // Start generation (this may take a while)
-      const designs = await generateSuite(fastify.prisma, projectId);
+      fastify.log.info({ projectId, userId }, "Starting suite generation");
+
+      void generateSuite(fastify.prisma, projectId).catch(async (error) => {
+        fastify.log.error(
+          { err: error, projectId, userId },
+          "Suite generation failed",
+        );
+
+        try {
+          await fastify.prisma.design.updateMany({
+            where: {
+              projectId,
+              generationStatus: { in: ["PENDING", "GENERATING"] },
+            },
+            data: { generationStatus: "FAILED" },
+          });
+        } catch (markFailedError) {
+          fastify.log.error(
+            { err: markFailedError, projectId },
+            "Failed to mark unfinished designs as FAILED",
+          );
+        }
+      });
 
       const response: ApiResponse<DesignResponse[]> = {
         success: true,
-        data: designs.map((d) => ({
-          id: d.id,
-          projectId: d.projectId,
-          designType: d.designType,
-          style: d.style,
-          previewUrl: d.previewUrl,
-          fullUrl: d.fullUrl,
-          aspectRatio: d.aspectRatio,
-          generationStatus: d.generationStatus,
-          textContent: d.textContent as Record<string, Record<string, string>> | null,
-          isDownloaded: d.isDownloaded,
-          createdAt: d.createdAt.toISOString(),
-        })),
+        data: [],
       };
 
-      reply.send(response);
+      reply.status(202).send(response);
     },
   );
 }

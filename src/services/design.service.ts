@@ -14,6 +14,8 @@ interface TextContent {
 // Hero design types get 4K resolution; everything else gets 2K
 const HERO_SIZE = "4K" as const;
 const STANDARD_SIZE = "2K" as const;
+const GEMINI_TIMEOUT_MS = 180_000;
+const STORAGE_TIMEOUT_MS = 60_000;
 
 /**
  * Generate the full design suite for a project.
@@ -24,6 +26,8 @@ export async function generateSuite(
   prisma: PrismaClient,
   projectId: string,
 ): Promise<Design[]> {
+  console.info(`[design] generateSuite:start projectId=${projectId}`);
+
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new NotFoundError("Project");
 
@@ -48,6 +52,10 @@ export async function generateSuite(
   const heroIdx = pieces.findIndex((p) => p.designType === pack.heroDesignType);
   const heroSpec = heroIdx >= 0 ? pieces[heroIdx] : pieces[0];
   const restSpecs = pieces.filter((_, i) => i !== (heroIdx >= 0 ? heroIdx : 0));
+
+  console.info(
+    `[design] generateSuite:pack projectId=${projectId} hero=${heroSpec.designType} total=${pieces.length}`,
+  );
 
   // Create all design records up front as PENDING
   const designRecords = await Promise.all(
@@ -108,6 +116,10 @@ export async function generateSuite(
     if (result.status === "fulfilled") completed.push(result.value.design);
 
   }
+
+  console.info(
+    `[design] generateSuite:done projectId=${projectId} completed=${completed.length} total=${pieces.length}`,
+  );
 
   return completed;
 }
@@ -252,7 +264,19 @@ async function generateOne(
   await prisma.design.update({ where: { id: record.id }, data: { generationStatus: "GENERATING" } });
 
   try {
-    const rawBuffer = await generateDesignImage(opts);
+    console.info(
+      `[design] generateOne:start designId=${record.id} type=${record.designType} projectId=${projectId}`,
+    );
+
+    const rawBuffer = await withTimeout(
+      generateDesignImage(opts),
+      GEMINI_TIMEOUT_MS,
+      `Gemini generation timed out for ${record.designType}`,
+    );
+
+    console.info(
+      `[design] generateOne:gemini-complete designId=${record.id} type=${record.designType}`,
+    );
 
     // Composite text programmatically for Arabic/Hindi designs
     const finalBuffer = textOpts?.textFree
@@ -264,15 +288,51 @@ async function generateOne(
         })
       : rawBuffer;
 
-    const { previewUrl, fullUrl } = await processGeneratedImage(finalBuffer, record.id, projectId);
+    console.info(
+      `[design] generateOne:upload-start designId=${record.id} type=${record.designType}`,
+    );
+
+    const { previewUrl, fullUrl } = await withTimeout(
+      processGeneratedImage(finalBuffer, record.id, projectId),
+      STORAGE_TIMEOUT_MS,
+      `Image upload timed out for ${record.designType}`,
+    );
+
     const design = await prisma.design.update({
       where: { id: record.id },
       data: { previewUrl, fullUrl, generationStatus: "COMPLETED" },
     });
+
+    console.info(
+      `[design] generateOne:complete designId=${record.id} type=${record.designType}`,
+    );
+
     return { design, rawBuffer };
   } catch (err) {
     await prisma.design.update({ where: { id: record.id }, data: { generationStatus: "FAILED" } });
+    console.error(
+      `[design] generateOne:failed designId=${record.id} type=${record.designType} error=${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
