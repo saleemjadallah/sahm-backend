@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { generateSuiteRoute } from "./generate-suite.js";
 import { regenerateDesignRoute } from "./regenerate.js";
 import { downloadDesignRoute } from "./download.js";
+import { stylePreviewsRoute } from "./style-previews.js";
 
 export async function designRoutes(fastify: FastifyInstance) {
   // POST /api/projects/:id/generate — registered under /api/projects prefix
@@ -13,6 +14,9 @@ export async function designRoutes(fastify: FastifyInstance) {
 
   // POST /api/designs/:id/download — Get download URL
   await fastify.register(downloadDesignRoute);
+
+  // GET /api/designs/style-previews — Public style preview URLs
+  await fastify.register(stylePreviewsRoute);
 }
 
 // Export generate suite separately since it registers under /api/projects prefix
