@@ -34,14 +34,16 @@ export function buildDesignPrompt(
 
   if (!layoutGuide) throw new Error(`Unknown design type: ${designType}`);
 
-  // Test model-rendered text for the birth announcement only.
-  // Everything else stays on the deterministic overlay path.
-  const textFree = designType !== "BABY_BIRTH_ANNOUNCEMENT";
+  // Roll baby-suite cards onto model-rendered exact text.
+  // Wedding and other non-baby surfaces stay on the deterministic overlay path.
+  const useInlineBabyText = designType.startsWith("BABY_");
+  const textFree = !useInlineBabyText;
 
   const contentPrompt = textFree
     ? buildBackgroundPrompt(layoutGuide, styleGuide, culturalGuide, ceremonyContext, suitePack, designRole, designType, languages)
-    : designType === "BABY_BIRTH_ANNOUNCEMENT"
-      ? buildBirthAnnouncementInlineTextPrompt(
+    : useInlineBabyText
+      ? buildBabyInlineTextPrompt(
+          designType,
           layoutGuide,
           styleGuide,
           culturalGuide,
@@ -160,7 +162,8 @@ This asset must feel intentionally designed for its role in the ${suitePack.labe
 `.trim();
 }
 
-function buildBirthAnnouncementInlineTextPrompt(
+function buildBabyInlineTextPrompt(
+  designType: string,
   layoutGuide: { description: string; aspectRatio: string; rules: string },
   styleGuide: { description: string; colors: string },
   culturalGuide: { rules: string },
@@ -170,22 +173,16 @@ function buildBirthAnnouncementInlineTextPrompt(
   textContent: Record<string, Record<string, string>>,
   languages: string[],
 ): string {
-  const exactFieldLines = [
-    renderFieldValue("babyName", "Top hero cartouche", textContent, languages),
-    renderFieldValue("birthDate", "Birth date box", textContent, languages),
-    renderFieldValue("birthTime", "Birth time box", textContent, languages),
-    renderFieldValue("weight", "Weight box", textContent, languages),
-    renderFieldValue("length", "Length box", textContent, languages),
-    renderFieldValue("parentNames", "Parents / family plaque", textContent, languages),
-    renderFieldValue("additionalInfo", "Bottom message panel", textContent, languages),
-  ]
+  const config = getBabyInlinePromptConfig(designType);
+  const exactFieldLines = config.fields
+    .map(({ field, label }) => renderFieldValue(field, label, textContent, languages))
     .filter(Boolean)
     .join("\n");
 
   return `
 Create a professional, print-ready ${layoutGuide.description} for a ${ctx.tradition || "multicultural"} ${ctx.event || "celebration"}.
 
-This is a controlled typography test. You must typeset the provided text directly into the card artwork.
+You must typeset the provided text directly into the card artwork.
 
 ASPECT RATIO: ${layoutGuide.aspectRatio}
 STYLE: ${styleGuide.description}
@@ -206,16 +203,13 @@ MANDATORY TEXT RULES:
 - Do not recreate the text with alternate spellings. Copy the exact strings only.
 - Keep all text crisp, elegant, and fully legible inside the intended decorative frames.
 - If multiple languages are provided for the same field, stack them cleanly within the same frame with the primary language most prominent.
+- Prefer fewer, better text blocks over clutter. If a field is not provided, leave that space decorative and empty.
 
 PLACE THE EXACT TEXT IN THESE FIELDS:
 ${exactFieldLines}
 
 LAYOUT INSTRUCTIONS:
-- Top hero cartouche: the baby's name only, centered and most prominent.
-- Middle four-box details panel: birth date, birth time, weight, and length in separate compartments.
-- Lower ornamental plaque: parents / family names only.
-- Bottom rectangular message panel: additional note only.
-- Leave unused frames empty if no exact text is provided for that field.
+${config.instructions.map((line) => `- ${line}`).join("\n")}
 
 LAYOUT RULES:
 ${layoutGuide.rules}
@@ -226,6 +220,124 @@ ${culturalGuide.rules}
 This must look like a finished luxury birth announcement card, not a blank template.
 `.trim();
 }
+
+function getBabyInlinePromptConfig(designType: string): {
+  fields: Array<{ field: string; label: string }>;
+  instructions: string[];
+} {
+  switch (designType) {
+    case "BABY_BIRTH_ANNOUNCEMENT":
+      return {
+        fields: [
+          { field: "babyName", label: "Top hero cartouche" },
+          { field: "birthDate", label: "Birth date box" },
+          { field: "birthTime", label: "Birth time box" },
+          { field: "weight", label: "Weight box" },
+          { field: "length", label: "Length box" },
+          { field: "parentNames", label: "Parents / family plaque" },
+          { field: "additionalInfo", label: "Bottom message panel" },
+        ],
+        instructions: [
+          "Top hero cartouche: the baby's name only, centered and most prominent.",
+          "Middle four-box details panel: birth date, birth time, weight, and length in separate compartments.",
+          "Lower ornamental plaque: parents / family names only.",
+          "Bottom rectangular message panel: additional note only.",
+          "Leave unused frames empty if no exact text is provided for that field.",
+        ],
+      };
+    case "BABY_NURSERY_ART":
+      return {
+        fields: [
+          { field: "babyName", label: "Main decorative name area" },
+          { field: "additionalInfo", label: "Optional small supporting line" },
+        ],
+        instructions: [
+          "The baby's name is the hero and should dominate the composition.",
+          "Treat this like premium nursery art, not an information card.",
+          "Any supporting note must stay small, subtle, and secondary.",
+          "Do not force birth stats onto this design unless they fit elegantly.",
+        ],
+      };
+    case "BABY_AQEEQAH_INVITE":
+      return {
+        fields: [
+          { field: "babyName", label: "Invitation hero name area" },
+          { field: "birthDate", label: "Date field" },
+          { field: "birthTime", label: "Time field" },
+          { field: "parentNames", label: "Hosting family line" },
+          { field: "additionalInfo", label: "Invitation note area" },
+        ],
+        instructions: [
+          "Use a clear invitation hierarchy with the baby's name most prominent.",
+          "Present date and time as structured invitation details.",
+          "Use the family line as a hosting signature, not the main headline.",
+          "If there is no exact ceremony heading provided, do not invent one.",
+        ],
+      };
+    case "BABY_MILESTONE_CARD":
+      return {
+        fields: [
+          { field: "babyName", label: "Primary name area" },
+          { field: "additionalInfo", label: "Milestone statement area" },
+        ],
+        instructions: [
+          "The milestone statement and baby's name should feel bold and shareable.",
+          "Keep the composition simple and high-contrast for social sharing.",
+          "Do not introduce extra baby stats or family details unless they are explicitly provided and fit cleanly.",
+        ],
+      };
+    case "BABY_WHATSAPP_CARD":
+      return {
+        fields: [
+          { field: "babyName", label: "Hero name area" },
+          { field: "birthDate", label: "Date field" },
+          { field: "weight", label: "Weight field" },
+          { field: "parentNames", label: "Family line" },
+          { field: "additionalInfo", label: "Optional supporting note" },
+        ],
+        instructions: [
+          "Make the baby's name immediately readable on a phone screen.",
+          "Keep date and weight compact, clear, and visually separated.",
+          "Use the family line as a secondary supporting element.",
+          "Avoid clutter and leave unused decorative areas empty.",
+        ],
+      };
+    case "BABY_THANK_YOU":
+      return {
+        fields: [
+          { field: "babyName", label: "Name area" },
+          { field: "parentNames", label: "Family signature line" },
+          { field: "additionalInfo", label: "Thank-you message panel" },
+        ],
+        instructions: [
+          "This should read as a warm thank-you card, not an announcement grid.",
+          "Baby name first, message second, family signature last.",
+          "Keep the wording intimate and spacious, with generous breathing room.",
+        ],
+      };
+    default:
+      return {
+        fields: Object.keys(textContentFieldOrder).map((field) => ({
+          field,
+          label: field,
+        })),
+        instructions: [
+          "Use a clear visual hierarchy with the baby's name most prominent.",
+          "Typeset only the provided fields and leave all unused spaces empty.",
+        ],
+      };
+  }
+}
+
+const textContentFieldOrder: Record<string, true> = {
+  babyName: true,
+  birthDate: true,
+  birthTime: true,
+  weight: true,
+  length: true,
+  parentNames: true,
+  additionalInfo: true,
+};
 
 function renderFieldValue(
   field: string,
