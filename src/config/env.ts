@@ -23,6 +23,10 @@ export const env = cleanEnv(process.env, {
   GOOGLE_CLIENT_ID: str({ default: "" }),
   GOOGLE_CLIENT_SECRET: str({ default: "" }),
 
+  // Clerk
+  CLERK_SECRET_KEY: str({ default: "" }),
+  CLERK_JWT_KEY: str({ default: "" }),
+
   // Gemini AI
   GEMINI_API_KEY: str({ default: "" }),
   GEMINI_MODEL: str({ default: "gemini-3.1-flash-image-preview" }),

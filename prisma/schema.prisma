@@ -11,6 +11,7 @@ datasource db {
 
 model User {
   id             String        @id @default(cuid())
+  clerkId        String?       @unique
   email          String        @unique
   name           String?
   locale         String        @default("en") // "en", "ar", or "hi"
@@ -30,6 +31,7 @@ model User {
   subscription   Subscription?
 
   @@index([email])
+  @@index([clerkId])
   @@index([googleId])
   @@index([appleId])
 }
