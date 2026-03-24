@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ─────────────────────────────────────────────
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  name           String?
+  locale         String        @default("en") // "en", "ar", or "hi"
+  phone          String?
+
+  // Auth providers
+  googleId       String?       @unique
+  appleId        String?       @unique
+  magicLinkToken String?       // Hashed token for email magic link
+  magicLinkExpiry DateTime?
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  projects       Project[]
+  downloads      Download[]
+  subscription   Subscription?
+
+  @@index([email])
+  @@index([googleId])
+  @@index([appleId])
+}
+
+// ─── Projects ──────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        ProjectType
+  title       String?       // User-facing name: "Ahmed & Fatima's Wedding"
+  status      ProjectStatus @default(ACTIVE)
+
+  // Shared fields across project types
+  nameAr      String?       // Primary Arabic name(s)
+  nameEn      String?       // Primary English name(s)
+  nameHi      String?       // Primary Hindi/Devanagari name(s)
+  date        DateTime?     // Event date (wedding date, birth date)
+  dateHijri   String?       // Hijri date string
+  languages   String        @default("[\"en\"]") // JSON array: which languages to render
+
+  // RSVP
+  rsvpSlug    String?       @unique // e.g. "ahmed-fatima" for sahm.app/rsvp/ahmed-fatima
+
+  // Project-type-specific data stored as JSON
+  metadata    Json?         // Flexible storage for type-specific fields
+
+  designs     Design[]
+  guests      Guest[]       // For weddings — RSVP tracking
+  milestones  Milestone[]   // For babies — milestone reminders
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([rsvpSlug])
+}
+
+enum ProjectType {
+  WEDDING
+  BABY
+  WALL_ART    // Phase 2
+  GIFT        // Phase 2
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+// ─── Designs ───────────────────────────────────────────
+
+model Design {
+  id               String           @id @default(cuid())
+  projectId        String
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designType       DesignType
+  style            String?          // Style variant used
+
+  // Image data
+  previewUrl       String           // Watermarked low-res preview (free to view)
+  fullUrl          String?          // Unwatermarked high-res (unlocked after purchase)
+  prompt           String?          // Gemini prompt used (for regeneration)
+  aspectRatio      String           @default("1:1") // "1:1", "9:16", "4:5", "16:9", "3:4", "A4", "A5"
+
+  // AI generation tracking
+  generationStatus GenerationStatus @default(PENDING)
+
+  // Metadata
+  textContent      Json?            // The actual text rendered in the image
+  isDownloaded     Boolean          @default(false)
+
+  createdAt        DateTime         @default(now())
+
+  @@index([projectId])
+  @@index([designType])
+  @@index([generationStatus])
+}
+
+enum DesignType {
+  // Wedding
+  WEDDING_INVITATION
+  WEDDING_SAVE_THE_DATE
+  WEDDING_RSVP_CARD
+  WEDDING_MENU_CARD
+  WEDDING_TABLE_NUMBER
+  WEDDING_WELCOME_SIGN
+  WEDDING_THANK_YOU
+  WEDDING_INSTAGRAM_POST
+  WEDDING_WHATSAPP_CARD
+
+  // Baby
+  BABY_BIRTH_ANNOUNCEMENT
+  BABY_NURSERY_ART
+  BABY_AQEEQAH_INVITE
+  BABY_MILESTONE_CARD
+  BABY_THANK_YOU
+  BABY_WHATSAPP_CARD
+
+  // Wall Art (Phase 2)
+  WALL_ART_CUSTOM
+  WALL_ART_QURANIC
+  WALL_ART_NAME
+  WALL_ART_QUOTE
+
+  // Gifting (Phase 2)
+  GIFT_EID_CARD
+  GIFT_RAMADAN_CARD
+  GIFT_CUSTOM
+}
+
+enum GenerationStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+// ─── Guests (Wedding RSVP) ────────────────────────────
+
+model Guest {
+  id             String     @id @default(cuid())
+  projectId      String
+  project        Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name           String
+  nameAr         String?
+  phone          String?    // For WhatsApp broadcast
+  email          String?
+  rsvpStatus     RsvpStatus @default(PENDING)
+  rsvpAt         DateTime?
+  plusOnes       Int        @default(0)
+  dietaryNotes   String?
+  tableNumber    String?
+  inviteSentAt   DateTime?  // When WhatsApp/email invite was sent
+  inviteOpenedAt DateTime?  // When they opened the RSVP link
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([projectId])
+  @@index([rsvpStatus])
+}
+
+enum RsvpStatus {
+  PENDING
+  ATTENDING
+  NOT_ATTENDING
+  MAYBE
+}
+
+// ─── Milestones (Baby Journey) ─────────────────────────
+
+model Milestone {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  type        MilestoneType
+  triggerDate DateTime      // When to remind the parent
+  designId    String?       // Auto-generated design for this milestone
+  isNotified  Boolean       @default(false)
+  isShared    Boolean       @default(false)
+
+  createdAt   DateTime      @default(now())
+
+  @@index([projectId])
+  @@index([triggerDate])
+  @@index([isNotified])
+}
+
+enum MilestoneType {
+  DAY_7           // Naming ceremony / aqeeqah (Islamic tradition)
+  DAY_40          // 40 days — significant in Gulf culture
+  MONTH_1
+  MONTH_2
+  MONTH_3
+  MONTH_6
+  MONTH_9
+  YEAR_1
+  FIRST_RAMADAN
+  FIRST_EID
+}
+
+// ─── Downloads / Purchases ─────────────────────────────
+
+model Download {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designId        String
+  purchaseType    PurchaseType
+  amountAed       Int          // Amount in fils (e.g., 2900 = AED 29)
+  stripePaymentId String?
+  createdAt       DateTime     @default(now())
+
+  @@index([userId])
+  @@index([designId])
+}
+
+enum PurchaseType {
+  SINGLE_DESIGN     // One-off download
+  SUITE             // Full stationery suite (wedding or baby)
+  CREDIT_PACK       // Prepaid credits
+}
+
+// ─── Subscriptions ─────────────────────────────────────
+
+model Subscription {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             SubPlan
+  stripeCustomerId String?
+  stripeSubId      String?
+  status           String    @default("active")
+  currentPeriodEnd DateTime?
+  creditsRemaining Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([stripeCustomerId])
+}
+
+enum SubPlan {
+  FREE          // Watermarked previews only, no downloads
+  STARTER       // AED 29/mo — 5 downloads/month
+  UNLIMITED     // AED 79/mo — unlimited downloads
+}
+
+// ─── Translation Cache ─────────────────────────────────
+
+model TranslationCache {
+  id        String   @id @default(cuid())
+  input     String   // Original text
+  fromLang  String   // "en", "ar", "hi"
+  toLang    String   // "en", "ar", "hi"
+  fieldType String   // "name", "phrase", "venue", "general", "ui"
+  output    String   // Translated/transliterated text
+  createdAt DateTime @default(now())
+
+  @@unique([input, fromLang, toLang, fieldType])
+  @@index([fromLang, toLang, fieldType])
+}
