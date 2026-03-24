@@ -1,9 +1,35 @@
-import { readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { tmpdir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FONTS_DIR = join(__dirname, "../../../assets/fonts");
+const FONTCONFIG_DIR = join(tmpdir(), "sahm-fontconfig");
+const FONTCONFIG_FILE = join(FONTCONFIG_DIR, "fonts.conf");
+
+function ensureFontConfig(): void {
+  if (existsSync(FONTCONFIG_FILE)) {
+    process.env.FONTCONFIG_PATH = FONTCONFIG_DIR;
+    process.env.FONTCONFIG_FILE = FONTCONFIG_FILE;
+    return;
+  }
+
+  mkdirSync(FONTCONFIG_DIR, { recursive: true });
+
+  const config = `<?xml version="1.0"?>
+<fontconfig>
+  <dir>${FONTS_DIR}</dir>
+  <cachedir>${FONTCONFIG_DIR}</cachedir>
+</fontconfig>
+`;
+
+  writeFileSync(FONTCONFIG_FILE, config, "utf8");
+  process.env.FONTCONFIG_PATH = FONTCONFIG_DIR;
+  process.env.FONTCONFIG_FILE = FONTCONFIG_FILE;
+}
+
+ensureFontConfig();
 
 export type FontKey =
   | "arabic-naskh"
