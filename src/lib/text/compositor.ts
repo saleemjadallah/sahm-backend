@@ -72,6 +72,13 @@ function buildTextElements(
     const primaryText = fieldData[primaryLang] || fieldData.en || "";
     if (!primaryText && !secondaryLangs.some((l) => fieldData[l])) continue;
 
+    if (zone.box) {
+      elements.push(
+        ...textBoxEls(zone, fieldData, primaryLang, secondaryLangs, width, height, colorOverride),
+      );
+      continue;
+    }
+
     const xPct = zone.align === "center" ? 50 : zone.align === "right" ? 85 : 15;
     const fontSize = Math.round(height * zone.fontSizePct / 100);
     const color = colorOverride || zone.color;
@@ -102,6 +109,206 @@ function buildTextElements(
   }
 
   return elements.join("\n  ");
+}
+
+function textBoxEls(
+  zone: TextZone,
+  fieldData: Record<string, string>,
+  primaryLang: string,
+  secondaryLangs: string[],
+  width: number,
+  height: number,
+  colorOverride?: string,
+): string[] {
+  const box = zone.box;
+  if (!box) return [];
+
+  const lines: string[] = [];
+  const boxX = Math.round(width * box.xPct / 100);
+  const boxY = Math.round(height * box.yPct / 100);
+  const boxWidth = Math.round(width * box.widthPct / 100);
+  const boxHeight = Math.round(height * box.heightPct / 100);
+  const padding = Math.round(width * (box.paddingPct ?? 2) / 100);
+  const usableWidth = Math.max(60, boxWidth - (padding * 2));
+  const usableHeight = Math.max(20, boxHeight - (padding * 2));
+  const centerX = boxX + (boxWidth / 2);
+  const color = colorOverride || zone.color;
+
+  const textEntries: Array<{
+    text: string;
+    lang: string;
+    role: "primary" | "secondary";
+  }> = [];
+
+  const primaryText = fieldData[primaryLang] || fieldData.en || "";
+  if (primaryText) {
+    textEntries.push({ text: primaryText, lang: primaryLang, role: "primary" });
+  }
+
+  for (const lang of secondaryLangs) {
+    const text = fieldData[lang];
+    if (text) {
+      textEntries.push({ text, lang, role: "secondary" });
+    }
+  }
+
+  if (!textEntries.length) return [];
+
+  const maxFontSize = Math.max(
+    14,
+    Math.round(height * (zone.fontSizeMaxPct ?? zone.fontSizePct) / 100),
+  );
+  const minFontSize = Math.max(
+    10,
+    Math.round(height * (zone.fontSizeMinPct ?? Math.max(zone.fontSizePct * 0.6, 1.3)) / 100),
+  );
+
+  let fitted = fitTextEntries(textEntries, zone, usableWidth, usableHeight, maxFontSize, minFontSize);
+  if (!fitted) {
+    fitted = fitTextEntries(textEntries, zone, usableWidth, usableHeight, minFontSize, minFontSize);
+  }
+  if (!fitted) return [];
+
+  const totalHeight = fitted.blocks.reduce((sum, block) => sum + block.totalHeight, 0)
+    + Math.max(0, fitted.blocks.length - 1) * Math.round(fitted.baseFontSize * 0.28);
+  let cursorY = boxY + padding + ((usableHeight - totalHeight) / 2);
+
+  for (let blockIndex = 0; blockIndex < fitted.blocks.length; blockIndex++) {
+    const block = fitted.blocks[blockIndex];
+    const font = fontForLang(block.lang, zone.fontRole);
+
+    for (const line of block.lines) {
+      const lineCenterY = cursorY + (block.lineHeight / 2);
+      lines.push(
+        textEl(
+          line,
+          (centerX / width) * 100,
+          lineCenterY,
+          block.fontSize,
+          getFontFamily(font),
+          color,
+          "middle",
+          block.lang === "ar" ? "rtl" : "ltr",
+          usableWidth,
+          width,
+        ),
+      );
+      cursorY += block.lineHeight;
+    }
+
+    if (blockIndex < fitted.blocks.length - 1) {
+      cursorY += Math.round(fitted.baseFontSize * 0.28);
+    }
+  }
+
+  return lines;
+}
+
+function fitTextEntries(
+  entries: Array<{ text: string; lang: string; role: "primary" | "secondary" }>,
+  zone: TextZone,
+  usableWidth: number,
+  usableHeight: number,
+  maxFontSize: number,
+  minFontSize: number,
+): {
+  baseFontSize: number;
+  blocks: Array<{
+    lines: string[];
+    lang: string;
+    fontSize: number;
+    lineHeight: number;
+    totalHeight: number;
+  }>;
+} | null {
+  for (let baseFontSize = maxFontSize; baseFontSize >= minFontSize; baseFontSize -= 1) {
+    const blocks: Array<{
+      lines: string[];
+      lang: string;
+      fontSize: number;
+      lineHeight: number;
+      totalHeight: number;
+    }> = [];
+
+    let totalHeight = 0;
+    let fits = true;
+
+    for (const entry of entries) {
+      const fontSize = entry.role === "primary"
+        ? baseFontSize
+        : Math.max(10, Math.round(baseFontSize * zone.secondaryScale));
+      const lineHeight = Math.round(fontSize * (entry.role === "primary" ? 1.1 : 1.18));
+      const wrapped = wrapText(entry.text, usableWidth, fontSize, zone.fontRole);
+      if (!wrapped.length) continue;
+      if (zone.lineClamp && wrapped.length > zone.lineClamp) {
+        fits = false;
+        break;
+      }
+
+      const blockHeight = wrapped.length * lineHeight;
+      totalHeight += blockHeight;
+      blocks.push({
+        lines: wrapped,
+        lang: entry.lang,
+        fontSize,
+        lineHeight,
+        totalHeight: blockHeight,
+      });
+    }
+
+    totalHeight += Math.max(0, blocks.length - 1) * Math.round(baseFontSize * 0.28);
+    if (fits && totalHeight <= usableHeight) {
+      return { baseFontSize, blocks };
+    }
+  }
+
+  return null;
+}
+
+function wrapText(
+  text: string,
+  maxWidth: number,
+  fontSize: number,
+  fontRole: "display" | "body",
+): string[] {
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (!normalized) return [];
+
+  const widthFactor = fontRole === "display" ? 0.58 : 0.54;
+  const approxCharsPerLine = Math.max(3, Math.floor(maxWidth / (fontSize * widthFactor)));
+
+  if (normalized.length <= approxCharsPerLine) {
+    return [normalized];
+  }
+
+  const words = normalized.split(" ");
+  if (words.length === 1) {
+    return [normalized];
+  }
+
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= approxCharsPerLine) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+    } else {
+      lines.push(word);
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
 }
 
 function textEl(

@@ -2,6 +2,14 @@
  * A text zone defines where a piece of text goes on the design.
  * Positions are percentages (0–100) of image dimensions.
  */
+export interface TextBox {
+  xPct: number;           // left edge
+  yPct: number;           // top edge
+  widthPct: number;
+  heightPct: number;
+  paddingPct?: number;    // inner horizontal padding
+}
+
 export interface TextZone {
   field: string;           // key into textContent (e.g. "groomName", "date")
   yPct: number;            // vertical center position (% from top)
@@ -11,6 +19,10 @@ export interface TextZone {
   align: "left" | "center" | "right";
   maxWidthPct: number;     // max line width as % of image width
   secondaryScale: number;  // secondary language font size multiplier (e.g. 0.6)
+  box?: TextBox;           // explicit framed area for deterministic text placement
+  fontSizeMinPct?: number;
+  fontSizeMaxPct?: number;
+  lineClamp?: number;
 }
 
 export interface TextLayout {
@@ -32,6 +44,25 @@ const detailLine = (field: string, yPct: number): TextZone => ({
 const smallLine = (field: string, yPct: number): TextZone => ({
   field, yPct, fontSizePct: 2, fontRole: "body", color: "#555555",
   align: "center", maxWidthPct: 70, secondaryScale: 0.7,
+});
+
+const framedBox = (
+  field: string,
+  box: TextBox,
+  options: Partial<TextZone> = {},
+): TextZone => ({
+  field,
+  yPct: box.yPct + (box.heightPct / 2),
+  fontSizePct: options.fontSizePct ?? 3,
+  fontRole: options.fontRole ?? "body",
+  color: options.color ?? "#7f6a45",
+  align: options.align ?? "center",
+  maxWidthPct: options.maxWidthPct ?? box.widthPct,
+  secondaryScale: options.secondaryScale ?? 0.7,
+  box,
+  fontSizeMinPct: options.fontSizeMinPct,
+  fontSizeMaxPct: options.fontSizeMaxPct,
+  lineClamp: options.lineClamp,
 });
 
 // ─── Wedding Layouts ────────────────────────────────────
@@ -110,13 +141,59 @@ const WEDDING_SOCIAL: TextLayout = {
 
 const BABY_BIRTH_ANNOUNCEMENT: TextLayout = {
   zones: [
-    { ...heroName("babyName", 35), fontSizePct: 7 },
-    detailLine("birthDate", 52),
-    detailLine("birthTime", 58),
-    smallLine("weight", 64),
-    smallLine("length", 69),
-    smallLine("parentNames", 80),
-    smallLine("additionalInfo", 88),
+    framedBox("babyName", { xPct: 24, yPct: 22, widthPct: 52, heightPct: 11, paddingPct: 4 }, {
+      fontRole: "display",
+      color: "#846d47",
+      fontSizePct: 4.2,
+      fontSizeMinPct: 2.4,
+      fontSizeMaxPct: 5.4,
+      secondaryScale: 0.62,
+      lineClamp: 3,
+    }),
+    framedBox("birthDate", { xPct: 31, yPct: 40, widthPct: 38, heightPct: 4.9, paddingPct: 2.2 }, {
+      color: "#8e7750",
+      fontSizePct: 2.2,
+      fontSizeMinPct: 1.5,
+      fontSizeMaxPct: 2.6,
+      lineClamp: 2,
+    }),
+    framedBox("birthTime", { xPct: 31, yPct: 46.1, widthPct: 38, heightPct: 4.9, paddingPct: 2.2 }, {
+      color: "#8e7750",
+      fontSizePct: 2.2,
+      fontSizeMinPct: 1.5,
+      fontSizeMaxPct: 2.6,
+      lineClamp: 2,
+    }),
+    framedBox("weight", { xPct: 31, yPct: 52.2, widthPct: 38, heightPct: 4.9, paddingPct: 2.2 }, {
+      color: "#8e7750",
+      fontSizePct: 2.2,
+      fontSizeMinPct: 1.5,
+      fontSizeMaxPct: 2.6,
+      lineClamp: 2,
+    }),
+    framedBox("length", { xPct: 31, yPct: 58.3, widthPct: 38, heightPct: 4.9, paddingPct: 2.2 }, {
+      color: "#8e7750",
+      fontSizePct: 2.2,
+      fontSizeMinPct: 1.5,
+      fontSizeMaxPct: 2.6,
+      lineClamp: 2,
+    }),
+    framedBox("parentNames", { xPct: 24, yPct: 71.7, widthPct: 52, heightPct: 8.4, paddingPct: 3.2 }, {
+      color: "#836c47",
+      fontSizePct: 2.25,
+      fontSizeMinPct: 1.5,
+      fontSizeMaxPct: 2.7,
+      secondaryScale: 0.66,
+      lineClamp: 3,
+    }),
+    framedBox("additionalInfo", { xPct: 24, yPct: 82.5, widthPct: 52, heightPct: 8.6, paddingPct: 3.2 }, {
+      color: "#836c47",
+      fontSizePct: 2.15,
+      fontSizeMinPct: 1.45,
+      fontSizeMaxPct: 2.6,
+      secondaryScale: 0.66,
+      lineClamp: 3,
+    }),
   ],
 };
 
@@ -193,6 +270,9 @@ export function describeZones(designType: string): string {
   if (!layout) return "Leave generous centered space for text overlay.";
 
   const lines = layout.zones.map((z) => {
+    if (z.box) {
+      return `- blank text box for ${z.field}: left ${z.box.xPct}%, top ${z.box.yPct}%, width ${z.box.widthPct}%, height ${z.box.heightPct}%`;
+    }
     const pct = z.yPct;
     const region = pct < 30 ? "upper" : pct < 60 ? "middle" : "lower";
     const size = z.fontSizePct > 5 ? "large" : z.fontSizePct > 3 ? "medium" : "small";
