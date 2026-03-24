@@ -5,94 +5,146 @@ export interface LayoutGuide {
 }
 
 export const LAYOUT_GUIDES: Record<string, LayoutGuide> = {
+  // ─── Wedding Pieces ──────────────────────────────────
+
   WEDDING_INVITATION: {
-    description: "formal wedding invitation card",
+    description: "formal wedding invitation card printed on premium card stock",
     aspectRatio: "4:5",
-    rules:
-      "Optional ceremonial header at top only if it fits the selected tradition. Names large and centered, with the primary language most prominent. Date, time, venue, and RSVP details below. If bilingual or trilingual, use clear visual separation between language blocks.",
+    rules: `Optional ceremonial header at top only when the tradition supports it.
+Couple's names large and centered — the hero element — with the primary language most prominent at 1.5-2x size.
+Date, time, venue, and RSVP details in a structured block below.
+Father's names and family names as supporting lines when culturally important.
+If bilingual or trilingual, use clear visual separation between language blocks with subtle dividers.
+Border treatment and ornamental motifs at full expression — this is the anchor piece of the suite.
+Leave breathing space between text blocks — 30% ornament, 70% content and space.`,
   },
+
   WEDDING_SAVE_THE_DATE: {
-    description: "save the date card",
+    description: "save the date card — the teaser piece in the suite",
     aspectRatio: "4:5",
-    rules:
-      "Date is the hero element. Names are secondary, venue optional, and any header should match the selected culture or remain neutral.",
+    rules: `Date is the hero element — largest and most visually prominent.
+Names are secondary, venue optional.
+Simplest expression of the suite's visual DNA: same palette, same typefaces, minimal motifs.
+Any header should match the selected culture or remain neutral.`,
   },
+
   WEDDING_RSVP_CARD: {
-    description: "RSVP response card",
+    description: "RSVP response card — functional companion to the invitation",
     aspectRatio: "16:9",
-    rules:
-      "Keep this piece clean and functional. Include name field, attending or not attending, guest count, dietary notes, and a small heading in the primary language if appropriate.",
+    rules: `Clean and functional. Same palette as the invitation but reduced ornament.
+Include: name field, attendance toggle, guest count, dietary notes.
+A small heading in the primary language if appropriate.
+Readable form-like layout — clarity over decoration.`,
   },
+
   WEDDING_MENU_CARD: {
-    description: "reception dinner menu card",
+    description: "reception dinner menu card printed on matching card stock",
     aspectRatio: "4:5",
-    rules:
-      "Elegant header. Course sections clearly divided. Bilingual dish names. Match suite style.",
+    rules: `Elegant header matching the invitation's typographic style.
+Course sections clearly divided with subtle rules or spacing.
+Bilingual dish names when multiple languages are selected.
+Same border or motif system as the invitation, used with restraint.`,
   },
+
   WEDDING_TABLE_NUMBER: {
-    description: "small table number card",
+    description: "table number card readable from across a banquet table",
     aspectRatio: "1:1",
-    rules:
-      "Table number large and centered, with any supporting label subtle. Match the suite style and keep it legible from a distance.",
+    rules: `Table number large and centered — readable from 2 meters away.
+One motif accent from the suite, minimal supporting text.
+Same palette, simplest piece in the suite.`,
   },
+
   WEDDING_WELCOME_SIGN: {
     description: "large welcome sign for wedding venue entrance",
     aspectRatio: "3:4",
-    rules:
-      "Very large text with a welcoming line in the primary language or a neutral ceremonial phrase. Couple names should be readable from a distance.",
+    rules: `The grandest piece in the suite — hero motif at full scale.
+Very large welcoming line in the primary language or a neutral ceremonial phrase.
+Couple's names large and readable from a distance.
+Full ornamental expression of the suite's border and motif system.`,
   },
+
   WEDDING_THANK_YOU: {
-    description: "post-wedding thank you card",
+    description: "post-wedding thank you card printed on premium card stock",
     aspectRatio: "4:5",
-    rules:
-      "Short gratitude message with a thank-you heading in the primary language only if it suits the selected tradition. Warm, elegant, and personal.",
+    rules: `Short gratitude message — warm, elegant, personal.
+Thank-you heading in the primary language only when the tradition supports it.
+Same palette as the invitation but more intimate and minimal — less ornament, more breathing space.`,
   },
+
   WEDDING_INSTAGRAM_POST: {
-    description: "wedding announcement for Instagram feed",
+    description: "wedding announcement designed to stop the scroll on Instagram",
     aspectRatio: "1:1",
-    rules:
-      "Visually striking. Names as hero. No heavy text blocks. This needs to stop the scroll.",
+    rules: `Visually striking with bold contrast — designed for phone screens.
+Names as hero element, large and centered.
+Minimal text — no heavy information blocks.
+Same palette and motif as the suite but bolder and higher-contrast for digital.`,
   },
+
   WEDDING_WHATSAPP_CARD: {
-    description: "wedding announcement optimized for WhatsApp sharing",
+    description: "wedding announcement optimized for WhatsApp sharing and compression",
     aspectRatio: "1:1",
-    rules:
-      "Names very large and centered in primary language. Date and venue clear. Minimal detail \u2014 this is a teaser. Secondary languages smaller but legible. Include call to action for RSVP.",
+    rules: `Names very large and centered in primary language.
+Date and venue immediately readable.
+Minimal detail — this is a teaser card.
+Bold colors that survive WhatsApp image compression.
+Include a call to action for RSVP.
+Secondary languages smaller but legible.`,
   },
+
+  // ─── Baby Pieces ─────────────────────────────────────
+
   BABY_BIRTH_ANNOUNCEMENT: {
-    description: "birth announcement card",
+    description: "birth announcement card printed on premium card stock",
     aspectRatio: "4:5",
-    rules:
-      "Child's name is the hero in the primary script. Birth details below, parents or family names secondary, and any blessing should only appear when it suits the selected tradition.",
+    rules: `Child's name is the hero element in the primary script at 2-3x size.
+Birth details (date, time, weight, length) in a clean structured block below.
+Parents or family names as secondary elements.
+Blessings or ceremonial headers only when the tradition supports them.
+Framing motifs (botanical, celestial, or cultural) as elegant border treatment.`,
   },
+
   BABY_NURSERY_ART: {
-    description: "nursery wall art featuring baby's name",
+    description: "nursery wall art — a frame-worthy decorative name print",
     aspectRatio: "1:1",
-    rules:
-      "Feature the child's name as pure decorative art in the primary script. Keep extra text minimal and only add a blessing or motif if it fits the chosen context.",
+    rules: `Child's name as pure decorative art in the primary script — this is illustration, not information.
+Keep extra text minimal — birth details optional and small if present.
+Blessings or motifs only when they fit the ceremony context.
+The design should be frame-worthy and giftable — suitable for hanging in a nursery.`,
   },
+
   BABY_AQEEQAH_INVITE: {
-    description: "baby celebration invitation",
+    description: "baby ceremony invitation card",
     aspectRatio: "4:5",
-    rules:
-      "Prominent child name, ceremony title, date, time, venue, and family names. The invitation heading should match the actual baby occasion rather than assuming aqeeqah.",
+    rules: `Ceremony title as the heading — matching the actual baby occasion (aqeeqah, baptism, naming ceremony, etc.).
+Child's name prominent below the heading.
+Date, time, venue, and hosting family names in a structured details block.
+Cultural motifs framing the content — appropriate to the selected tradition.
+The invitation heading must match the actual occasion, not assume aqeeqah.`,
   },
+
   BABY_MILESTONE_CARD: {
-    description: "baby monthly milestone card for sharing",
+    description: "baby milestone card for sharing on Instagram and WhatsApp",
     aspectRatio: "1:1",
-    rules:
-      "Baby name + milestone text ('\u0634\u0647\u0631 \u0648\u0627\u062d\u062f' / '\u0664\u0660 \u064a\u0648\u0645' / '\u0633\u0646\u0629 \u0623\u0648\u0644\u0649'). Clean design matching original birth announcement style. Shareable on Instagram/WhatsApp.",
+    rules: `Baby name plus milestone text (e.g., "شهر واحد" / "٤٠ يوم" / "سنة أولى" or equivalent).
+Clean design matching the original birth announcement style and palette.
+Shareable on social media — bold enough for phone screens.
+Milestone number or age is the hero element.`,
   },
+
   BABY_WHATSAPP_CARD: {
-    description: "birth announcement optimized for WhatsApp",
+    description: "birth or ceremony announcement optimized for WhatsApp sharing",
     aspectRatio: "1:1",
-    rules:
-      "Child name large with key details such as date and weight. Designed to survive WhatsApp compression. Only include blessings or faith markers if the ceremony context supports them.",
+    rules: `Child's name large and centered — immediately readable.
+Key details (date, weight) clear and bold.
+Bold colors that survive WhatsApp image compression.
+Blessings or faith markers only when the ceremony context supports them.`,
   },
+
   BABY_THANK_YOU: {
     description: "thank you card for baby gifts and well-wishes",
     aspectRatio: "4:5",
-    rules:
-      "Short gratitude message matching the announcement style. Use a thank-you header only if it fits the family tradition and language set.",
+    rules: `Short gratitude message matching the announcement style.
+Same palette, same motif system, more intimate and personal.
+Thank-you header in the primary language only when it fits the family tradition.`,
   },
 };

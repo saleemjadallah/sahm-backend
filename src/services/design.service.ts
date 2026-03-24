@@ -1,8 +1,9 @@
 import type { PrismaClient, Project, Design, DesignType } from "@prisma/client";
-import { generateDesignImage } from "../lib/ai/gemini.js";
-import { buildDesignPrompt } from "../lib/ai/prompts.js";
+import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js";
+import { buildDesignPrompt, type DesignPrompt } from "../lib/ai/prompts.js";
 import { LAYOUT_GUIDES } from "../lib/ai/layout-guides.js";
 import { processGeneratedImage } from "./image.service.js";
+import { compositeText } from "../lib/text/compositor.js";
 import { NotFoundError, GeminiError } from "../errors/index.js";
 import { resolveSuitePack } from "../lib/ai/suite-packs.js";
 
@@ -10,27 +11,24 @@ interface TextContent {
   [fieldName: string]: Record<string, string>;
 }
 
+// Hero design types get 4K resolution; everything else gets 2K
+const HERO_SIZE = "4K" as const;
+const STANDARD_SIZE = "2K" as const;
+
 /**
  * Generate the full design suite for a project.
- * Loads the project, determines which design types to generate,
- * builds prompts, generates via Gemini with concurrency control,
- * watermarks, uploads to R2, and saves Design records.
+ * Uses hero-first strategy: generates the hero piece first,
+ * then passes it as a style reference to all subsequent pieces.
  */
 export async function generateSuite(
   prisma: PrismaClient,
   projectId: string,
 ): Promise<Design[]> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-  });
-
-  if (!project) {
-    throw new NotFoundError("Project");
-  }
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new NotFoundError("Project");
 
   const pack = resolveSuitePack(project.type, project.metadata as Record<string, unknown> | null);
-  const designTypes = pack.designTypes;
-  if (!designTypes || designTypes.length === 0) {
+  if (!pack.designTypes.length) {
     throw new GeminiError(`No design types configured for project type: ${project.type}`);
   }
 
@@ -39,81 +37,76 @@ export async function generateSuite(
   const style = (metadata?.style as string) || "modern";
   const textContent = buildTextContent(project, metadata);
 
-  // Create initial design records with PENDING status
-  const designRecords = await Promise.all(
-    designTypes.map((designType) => {
-      const layoutGuide = LAYOUT_GUIDES[designType];
-      const prompt = buildDesignPrompt(
-        project.type,
-        designType,
-        style,
-        textContent,
-        languages,
-        metadata,
-      );
+  // Build prompts for every design type
+  const pieces = pack.designTypes.map((designType) => {
+    const layout = LAYOUT_GUIDES[designType];
+    const prompt = buildDesignPrompt(project.type, designType, style, textContent, languages, metadata);
+    return { designType, layout, prompt, aspectRatio: layout?.aspectRatio || "1:1", textFree: prompt.textFree };
+  });
 
-      return prisma.design.create({
+  // Separate hero from the rest
+  const heroIdx = pieces.findIndex((p) => p.designType === pack.heroDesignType);
+  const heroSpec = heroIdx >= 0 ? pieces[heroIdx] : pieces[0];
+  const restSpecs = pieces.filter((_, i) => i !== (heroIdx >= 0 ? heroIdx : 0));
+
+  // Create all design records up front as PENDING
+  const designRecords = await Promise.all(
+    pieces.map((p) =>
+      prisma.design.create({
         data: {
           projectId: project.id,
-          designType: designType as DesignType,
+          designType: p.designType as DesignType,
           style,
-          previewUrl: "", // Will be updated after generation
-          prompt,
-          aspectRatio: layoutGuide?.aspectRatio || "1:1",
+          previewUrl: "",
+          prompt: p.prompt.contentPrompt,
+          aspectRatio: p.aspectRatio,
           generationStatus: "PENDING",
           textContent: textContent as object,
         },
-      });
-    }),
+      }),
+    ),
   );
 
-  // Generate images concurrently (limited by Gemini semaphore)
-  const results = await Promise.allSettled(
-    designRecords.map(async (design) => {
-      try {
-        // Update status to GENERATING
-        await prisma.design.update({
-          where: { id: design.id },
-          data: { generationStatus: "GENERATING" },
-        });
+  // Map designType -> record for easy lookup
+  const recordByType = new Map(designRecords.map((r) => [r.designType, r]));
 
-        const imageBuffer = await generateDesignImage(
-          design.prompt || "",
-          design.aspectRatio,
-        );
+  // Shared text compositing config
+  const textOpts: TextCompositeOpts = {
+    textFree: pieces[0]?.textFree ?? false,
+    designType: "", // set per piece
+    textContent,
+    languages,
+  };
 
-        const { previewUrl, fullUrl } = await processGeneratedImage(
-          imageBuffer,
-          design.id,
-          project.id,
-        );
+  // ── Step 1: Generate hero piece ──
+  const heroRecord = recordByType.get(heroSpec.designType)!;
+  const { design: heroDesign, rawBuffer: heroBuffer } = await generateOne(
+    prisma, heroRecord, project.id,
+    { prompt: heroSpec.prompt.contentPrompt, systemPrompt: heroSpec.prompt.systemPrompt, aspectRatio: heroSpec.aspectRatio, imageSize: HERO_SIZE },
+    { ...textOpts, designType: heroSpec.designType },
+  );
 
-        // Update design with URLs and COMPLETED status
-        return await prisma.design.update({
-          where: { id: design.id },
-          data: {
-            previewUrl,
-            fullUrl,
-            generationStatus: "COMPLETED",
-          },
-        });
-      } catch (err) {
-        // Mark as FAILED
-        await prisma.design.update({
-          where: { id: design.id },
-          data: { generationStatus: "FAILED" },
-        });
-        throw err;
-      }
+  // ── Step 2: Generate remaining pieces with hero as style reference ──
+  const restResults = await Promise.allSettled(
+    restSpecs.map((spec) => {
+      const record = recordByType.get(spec.designType)!;
+      const suitePrompt = spec.prompt.contentPrompt
+        + "\n\nSTYLE REFERENCE: Match the attached reference image's color palette, borders, motifs, and typography mood exactly. Only the layout and content should differ.";
+      return generateOne(
+        prisma, record, project.id,
+        { prompt: suitePrompt, systemPrompt: spec.prompt.systemPrompt, aspectRatio: spec.aspectRatio, imageSize: STANDARD_SIZE, referenceImage: heroBuffer },
+        { ...textOpts, designType: spec.designType },
+      );
     }),
   );
 
   // Collect completed designs
   const completed: Design[] = [];
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      completed.push(result.value);
-    }
+  if (heroDesign.generationStatus === "COMPLETED") completed.push(heroDesign);
+
+  for (const result of restResults) {
+    if (result.status === "fulfilled") completed.push(result.value.design);
+
   }
 
   return completed;
@@ -131,65 +124,49 @@ export async function regenerateDesign(
     where: { id: designId },
     include: { project: true },
   });
-
-  if (!design) {
-    throw new NotFoundError("Design");
-  }
+  if (!design) throw new NotFoundError("Design");
 
   const project = design.project;
   const languages: string[] = JSON.parse(project.languages);
   const metadata = project.metadata as Record<string, unknown> | null;
   const style = newStyle || design.style || (metadata?.style as string) || "modern";
-  const textContent = (design.textContent as TextContent) ||
-    buildTextContent(project, metadata);
-
+  const textContent = (design.textContent as TextContent) || buildTextContent(project, metadata);
   const layoutGuide = LAYOUT_GUIDES[design.designType];
-  const prompt = buildDesignPrompt(
-    project.type,
-    design.designType,
-    style,
-    textContent,
-    languages,
-    metadata,
-  );
 
-  // Update to GENERATING
+  const prompt = buildDesignPrompt(project.type, design.designType, style, textContent, languages, metadata);
+
   await prisma.design.update({
     where: { id: design.id },
-    data: { generationStatus: "GENERATING", style, prompt },
+    data: { generationStatus: "GENERATING", style, prompt: prompt.contentPrompt },
   });
 
   try {
-    const imageBuffer = await generateDesignImage(
-      prompt,
-      layoutGuide?.aspectRatio || design.aspectRatio,
-    );
+    let imageBuffer = await generateDesignImage({
+      prompt: prompt.contentPrompt,
+      systemPrompt: prompt.systemPrompt,
+      aspectRatio: layoutGuide?.aspectRatio || design.aspectRatio,
+    });
 
-    const { previewUrl, fullUrl } = await processGeneratedImage(
-      imageBuffer,
-      design.id,
-      project.id,
-    );
+    if (prompt.textFree) {
+      imageBuffer = await compositeText({
+        background: imageBuffer,
+        designType: design.designType,
+        textContent,
+        languages,
+      });
+    }
+
+    const { previewUrl, fullUrl } = await processGeneratedImage(imageBuffer, design.id, project.id);
 
     return await prisma.design.update({
       where: { id: design.id },
-      data: {
-        previewUrl,
-        fullUrl,
-        generationStatus: "COMPLETED",
-        prompt,
-        style,
-      },
+      data: { previewUrl, fullUrl, generationStatus: "COMPLETED", prompt: prompt.contentPrompt, style },
     });
   } catch (err) {
-    await prisma.design.update({
-      where: { id: design.id },
-      data: { generationStatus: "FAILED" },
+    await prisma.design.update({ where: { id: design.id }, data: { generationStatus: "FAILED" } });
+    throw new GeminiError("Failed to regenerate design", {
+      originalError: err instanceof Error ? err.message : String(err),
     });
-    throw new GeminiError(
-      "Failed to regenerate design",
-      { originalError: err instanceof Error ? err.message : String(err) },
-    );
   }
 }
 
@@ -205,10 +182,7 @@ export async function editDesign(
     where: { id: designId },
     include: { project: true },
   });
-
-  if (!design) {
-    throw new NotFoundError("Design");
-  }
+  if (!design) throw new NotFoundError("Design");
 
   const project = design.project;
   const languages: string[] = JSON.parse(project.languages);
@@ -216,55 +190,89 @@ export async function editDesign(
   const style = design.style || (metadata?.style as string) || "modern";
   const layoutGuide = LAYOUT_GUIDES[design.designType];
 
-  const prompt = buildDesignPrompt(
-    project.type,
-    design.designType,
-    style,
-    updatedText,
-    languages,
-    metadata,
-  );
+  const prompt = buildDesignPrompt(project.type, design.designType, style, updatedText, languages, metadata);
 
   await prisma.design.update({
     where: { id: design.id },
-    data: {
-      generationStatus: "GENERATING",
-      textContent: updatedText as object,
-      prompt,
-    },
+    data: { generationStatus: "GENERATING", textContent: updatedText as object, prompt: prompt.contentPrompt },
   });
 
   try {
-    const imageBuffer = await generateDesignImage(
-      prompt,
-      layoutGuide?.aspectRatio || design.aspectRatio,
-    );
+    let imageBuffer = await generateDesignImage({
+      prompt: prompt.contentPrompt,
+      systemPrompt: prompt.systemPrompt,
+      aspectRatio: layoutGuide?.aspectRatio || design.aspectRatio,
+    });
 
-    const { previewUrl, fullUrl } = await processGeneratedImage(
-      imageBuffer,
-      design.id,
-      project.id,
-    );
+    if (prompt.textFree) {
+      imageBuffer = await compositeText({
+        background: imageBuffer,
+        designType: design.designType,
+        textContent: updatedText,
+        languages,
+      });
+    }
+
+    const { previewUrl, fullUrl } = await processGeneratedImage(imageBuffer, design.id, project.id);
 
     return await prisma.design.update({
       where: { id: design.id },
-      data: {
-        previewUrl,
-        fullUrl,
-        generationStatus: "COMPLETED",
-        textContent: updatedText as object,
-        prompt,
-      },
+      data: { previewUrl, fullUrl, generationStatus: "COMPLETED", textContent: updatedText as object, prompt: prompt.contentPrompt },
     });
   } catch (err) {
-    await prisma.design.update({
-      where: { id: design.id },
-      data: { generationStatus: "FAILED" },
+    await prisma.design.update({ where: { id: design.id }, data: { generationStatus: "FAILED" } });
+    throw new GeminiError("Failed to edit design", {
+      originalError: err instanceof Error ? err.message : String(err),
     });
-    throw new GeminiError(
-      "Failed to edit design",
-      { originalError: err instanceof Error ? err.message : String(err) },
-    );
+  }
+}
+
+// ─── Internal: generate a single design piece ───────────
+
+interface GenerateOneResult {
+  design: Design;
+  /** Raw AI-generated background (before text compositing) — used as style reference for other suite pieces */
+  rawBuffer: Buffer;
+}
+
+interface TextCompositeOpts {
+  textFree: boolean;
+  designType: string;
+  textContent: TextContent;
+  languages: string[];
+}
+
+async function generateOne(
+  prisma: PrismaClient,
+  record: Design,
+  projectId: string,
+  opts: GenerateImageOpts,
+  textOpts?: TextCompositeOpts,
+): Promise<GenerateOneResult> {
+  await prisma.design.update({ where: { id: record.id }, data: { generationStatus: "GENERATING" } });
+
+  try {
+    const rawBuffer = await generateDesignImage(opts);
+
+    // Composite text programmatically for Arabic/Hindi designs
+    const finalBuffer = textOpts?.textFree
+      ? await compositeText({
+          background: rawBuffer,
+          designType: textOpts.designType,
+          textContent: textOpts.textContent,
+          languages: textOpts.languages,
+        })
+      : rawBuffer;
+
+    const { previewUrl, fullUrl } = await processGeneratedImage(finalBuffer, record.id, projectId);
+    const design = await prisma.design.update({
+      where: { id: record.id },
+      data: { previewUrl, fullUrl, generationStatus: "COMPLETED" },
+    });
+    return { design, rawBuffer };
+  } catch (err) {
+    await prisma.design.update({ where: { id: record.id }, data: { generationStatus: "FAILED" } });
+    throw err;
   }
 }
 
@@ -277,134 +285,53 @@ function buildTextContent(
   const content: TextContent = {};
 
   if (project.type === "WEDDING") {
-    // Names
-    if (metadata?.groomNameEn || metadata?.groomNameAr || metadata?.groomNameHi) {
-      content.groomName = {
-        en: (metadata?.groomNameEn as string) || "",
-        ar: (metadata?.groomNameAr as string) || "",
-        hi: (metadata?.groomNameHi as string) || "",
-      };
-    }
-    if (metadata?.brideNameEn || metadata?.brideNameAr || metadata?.brideNameHi) {
-      content.brideName = {
-        en: (metadata?.brideNameEn as string) || "",
-        ar: (metadata?.brideNameAr as string) || "",
-        hi: (metadata?.brideNameHi as string) || "",
-      };
-    }
-    if (metadata?.groomFatherEn || metadata?.groomFatherAr || metadata?.groomFatherHi) {
-      content.groomFather = {
-        en: (metadata?.groomFatherEn as string) || "",
-        ar: (metadata?.groomFatherAr as string) || "",
-        hi: (metadata?.groomFatherHi as string) || "",
-      };
-    }
-    if (metadata?.brideFatherEn || metadata?.brideFatherAr || metadata?.brideFatherHi) {
-      content.brideFather = {
-        en: (metadata?.brideFatherEn as string) || "",
-        ar: (metadata?.brideFatherAr as string) || "",
-        hi: (metadata?.brideFatherHi as string) || "",
-      };
-    }
-    if (metadata?.groomFamilyEn || metadata?.groomFamilyAr || metadata?.groomFamilyHi) {
-      content.groomFamily = {
-        en: (metadata?.groomFamilyEn as string) || "",
-        ar: (metadata?.groomFamilyAr as string) || "",
-        hi: (metadata?.groomFamilyHi as string) || "",
-      };
-    }
-    if (metadata?.brideFamilyEn || metadata?.brideFamilyAr || metadata?.brideFamilyHi) {
-      content.brideFamily = {
-        en: (metadata?.brideFamilyEn as string) || "",
-        ar: (metadata?.brideFamilyAr as string) || "",
-        hi: (metadata?.brideFamilyHi as string) || "",
-      };
-    }
-    if (metadata?.familyNameEn || metadata?.familyNameAr || metadata?.familyNameHi) {
-      content.familyName = {
-        en: (metadata?.familyNameEn as string) || "",
-        ar: (metadata?.familyNameAr as string) || "",
-        hi: (metadata?.familyNameHi as string) || "",
-      };
-    }
-    if (metadata?.venue) {
-      content.venue = {
-        en: (metadata?.venue as string) || "",
-        ar: (metadata?.venueAr as string) || "",
-        hi: (metadata?.venueHi as string) || "",
-      };
-    }
+    addField(content, "groomName", metadata, "groomNameEn", "groomNameAr", "groomNameHi");
+    addField(content, "brideName", metadata, "brideNameEn", "brideNameAr", "brideNameHi");
+    addField(content, "groomFather", metadata, "groomFatherEn", "groomFatherAr", "groomFatherHi");
+    addField(content, "brideFather", metadata, "brideFatherEn", "brideFatherAr", "brideFatherHi");
+    addField(content, "groomFamily", metadata, "groomFamilyEn", "groomFamilyAr", "groomFamilyHi");
+    addField(content, "brideFamily", metadata, "brideFamilyEn", "brideFamilyAr", "brideFamilyHi");
+    addField(content, "familyName", metadata, "familyNameEn", "familyNameAr", "familyNameHi");
+    addField(content, "venue", metadata, "venue", "venueAr", "venueHi");
+    addField(content, "city", metadata, "city", "cityAr", "cityHi");
+    addField(content, "additionalInfo", metadata, "additionalInfo", "additionalInfoAr", "additionalInfoHi");
+
     if (project.date) {
-      content.date = {
-        en: project.date.toISOString().split("T")[0],
-        ar: project.dateHijri || "",
-      };
+      content.date = { en: project.date.toISOString().split("T")[0], ar: project.dateHijri || "" };
     }
-    if (metadata?.weddingTime) {
-      content.time = {
-        en: (metadata.weddingTime as string) || "",
-      };
-    }
-    if (metadata?.receptionTime) {
-      content.secondaryTime = {
-        en: (metadata.receptionTime as string) || "",
-      };
-    }
-    if (metadata?.city) {
-      content.city = {
-        en: (metadata.city as string) || "",
-        ar: (metadata.cityAr as string) || "",
-        hi: (metadata.cityHi as string) || "",
-      };
-    }
-    if (metadata?.additionalInfo || metadata?.additionalInfoAr || metadata?.additionalInfoHi) {
-      content.additionalInfo = {
-        en: (metadata.additionalInfo as string) || "",
-        ar: (metadata.additionalInfoAr as string) || "",
-        hi: (metadata.additionalInfoHi as string) || "",
-      };
-    }
+    if (metadata?.weddingTime) content.time = { en: metadata.weddingTime as string };
+    if (metadata?.receptionTime) content.secondaryTime = { en: metadata.receptionTime as string };
   } else if (project.type === "BABY") {
-    if (metadata?.babyNameEn || metadata?.babyNameAr || metadata?.babyNameHi) {
-      content.babyName = {
-        en: (metadata?.babyNameEn as string) || project.nameEn || "",
-        ar: (metadata?.babyNameAr as string) || project.nameAr || "",
-        hi: (metadata?.babyNameHi as string) || project.nameHi || "",
-      };
-    }
-    if (metadata?.parentNamesEn || metadata?.parentNamesAr || metadata?.parentNamesHi) {
-      content.parentNames = {
-        en: (metadata?.parentNamesEn as string) || "",
-        ar: (metadata?.parentNamesAr as string) || "",
-        hi: (metadata?.parentNamesHi as string) || "",
-      };
-    }
+    addField(content, "babyName", metadata, "babyNameEn", "babyNameAr", "babyNameHi",
+      project.nameEn, project.nameAr, project.nameHi);
+    addField(content, "parentNames", metadata, "parentNamesEn", "parentNamesAr", "parentNamesHi");
+    addField(content, "additionalInfo", metadata, "additionalInfo", "additionalInfoAr", "additionalInfoHi");
+
     if (project.date) {
-      content.birthDate = {
-        en: project.date.toISOString().split("T")[0],
-        ar: project.dateHijri || (metadata?.birthDateHijri as string) || "",
-      };
+      content.birthDate = { en: project.date.toISOString().split("T")[0], ar: project.dateHijri || (metadata?.birthDateHijri as string) || "" };
     }
-    if (metadata?.timeOfBirth) {
-      content.birthTime = { en: metadata.timeOfBirth as string };
-    }
-    if (metadata?.weight) {
-      content.weight = { en: `${metadata.weight} kg` };
-    }
-    if (metadata?.length) {
-      content.length = { en: `${metadata.length} cm` };
-    }
-    if (metadata?.gender) {
-      content.gender = { en: metadata.gender as string };
-    }
-    if (metadata?.additionalInfo || metadata?.additionalInfoAr || metadata?.additionalInfoHi) {
-      content.additionalInfo = {
-        en: (metadata.additionalInfo as string) || "",
-        ar: (metadata.additionalInfoAr as string) || "",
-        hi: (metadata.additionalInfoHi as string) || "",
-      };
-    }
+    if (metadata?.timeOfBirth) content.birthTime = { en: metadata.timeOfBirth as string };
+    if (metadata?.weight) content.weight = { en: `${metadata.weight} kg` };
+    if (metadata?.length) content.length = { en: `${metadata.length} cm` };
+    if (metadata?.gender) content.gender = { en: metadata.gender as string };
   }
 
   return content;
+}
+
+function addField(
+  content: TextContent,
+  fieldName: string,
+  metadata: Record<string, unknown> | null,
+  enKey: string,
+  arKey: string,
+  hiKey: string,
+  fallbackEn?: string | null,
+  fallbackAr?: string | null,
+  fallbackHi?: string | null,
+): void {
+  const en = (metadata?.[enKey] as string) || fallbackEn || "";
+  const ar = (metadata?.[arKey] as string) || fallbackAr || "";
+  const hi = (metadata?.[hiKey] as string) || fallbackHi || "";
+  if (en || ar || hi) content[fieldName] = { en, ar, hi };
 }

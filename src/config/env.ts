@@ -11,38 +11,38 @@ export const env = cleanEnv(process.env, {
   APP_URL: url({ default: "http://localhost:4000" }),
 
   // Database
-  DATABASE_URL: str(),
+  DATABASE_URL: str({ default: "" }),
 
   // JWT / Auth
-  JWT_SECRET: str(),
-  JWT_REFRESH_SECRET: str(),
+  JWT_SECRET: str({ default: "dev-jwt-secret-change-in-production" }),
+  JWT_REFRESH_SECRET: str({ default: "dev-jwt-refresh-secret-change-in-production" }),
   JWT_ACCESS_EXPIRY: str({ default: "15m" }),
   JWT_REFRESH_EXPIRY: str({ default: "7d" }),
 
   // Google OAuth
-  GOOGLE_CLIENT_ID: str(),
+  GOOGLE_CLIENT_ID: str({ default: "" }),
   GOOGLE_CLIENT_SECRET: str({ default: "" }),
 
   // Gemini AI
-  GEMINI_API_KEY: str(),
-  GEMINI_MODEL: str({ default: "gemini-2.0-flash-exp" }),
-  GEMINI_IMAGE_MODEL: str({ default: "gemini-2.0-flash-exp" }),
+  GEMINI_API_KEY: str({ default: "" }),
+  GEMINI_MODEL: str({ default: "gemini-3.1-flash-image-preview" }),
+  GEMINI_IMAGE_MODEL: str({ default: "gemini-3-pro-image-preview" }),
   GEMINI_MAX_CONCURRENT: num({ default: 3 }),
 
   // Cloudflare R2
-  R2_ACCESS_KEY: str(),
-  R2_SECRET_KEY: str(),
+  R2_ACCESS_KEY: str({ default: "" }),
+  R2_SECRET_KEY: str({ default: "" }),
   R2_BUCKET: str({ default: "sahm-designs" }),
-  R2_ENDPOINT: str(),
-  R2_PUBLIC_URL: str(),
+  R2_ENDPOINT: str({ default: "" }),
+  R2_PUBLIC_URL: str({ default: "" }),
 
   // Stripe
-  STRIPE_SECRET_KEY: str(),
+  STRIPE_SECRET_KEY: str({ default: "" }),
   STRIPE_PUBLISHABLE_KEY: str({ default: "" }),
-  STRIPE_WEBHOOK_SECRET: str(),
+  STRIPE_WEBHOOK_SECRET: str({ default: "" }),
 
   // Resend
-  RESEND_API_KEY: str(),
+  RESEND_API_KEY: str({ default: "" }),
   EMAIL_FROM: str({ default: "Sahm <noreply@sahm.app>" }),
 
   // WhatsApp (Phase 2)
