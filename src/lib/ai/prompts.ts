@@ -14,8 +14,7 @@ export interface DesignPrompt {
 /**
  * Build the Gemini prompt for a design generation request.
  *
- * Always generate a text-free background and composite exact text later.
- * This avoids placeholder or hallucinated typography from the image model.
+ * Build the Gemini prompt for a design generation request.
  */
 export function buildDesignPrompt(
   projectType: string,
@@ -34,35 +33,31 @@ export function buildDesignPrompt(
 
   if (!layoutGuide) throw new Error(`Unknown design type: ${designType}`);
 
-  // Roll baby-suite cards onto model-rendered exact text.
-  // Wedding and other non-baby surfaces stay on the deterministic overlay path.
-  const useInlineBabyText = designType.startsWith("BABY_");
-  const textFree = !useInlineBabyText;
-
-  const contentPrompt = textFree
-    ? buildBackgroundPrompt(layoutGuide, styleGuide, culturalGuide, ceremonyContext, suitePack, designRole, designType, languages)
-    : useInlineBabyText
-      ? buildBabyInlineTextPrompt(
-          designType,
-          layoutGuide,
-          styleGuide,
-          culturalGuide,
-          ceremonyContext,
-          suitePack,
-          designRole,
-          textContent,
-          languages,
-        )
-      : buildFullPrompt(
-          layoutGuide,
-          styleGuide,
-          culturalGuide,
-          ceremonyContext,
-          suitePack,
-          designRole,
-          textContent,
-          languages,
-        );
+  // Roll exact-text model rendering out to the full catalog.
+  const textFree = false;
+  const contentPrompt = designType.startsWith("BABY_")
+    ? buildBabyInlineTextPrompt(
+        designType,
+        layoutGuide,
+        styleGuide,
+        culturalGuide,
+        ceremonyContext,
+        suitePack,
+        designRole,
+        textContent,
+        languages,
+      )
+    : buildWeddingInlineTextPrompt(
+        designType,
+        layoutGuide,
+        styleGuide,
+        culturalGuide,
+        ceremonyContext,
+        suitePack,
+        designRole,
+        textContent,
+        languages,
+      );
 
   return { systemPrompt: styleGuide.systemPrompt, contentPrompt, textFree };
 }
@@ -221,6 +216,65 @@ This must look like a finished luxury birth announcement card, not a blank templ
 `.trim();
 }
 
+function buildWeddingInlineTextPrompt(
+  designType: string,
+  layoutGuide: { description: string; aspectRatio: string; rules: string },
+  styleGuide: { description: string; colors: string },
+  culturalGuide: { rules: string },
+  ctx: CeremonyContextResult,
+  suitePack: { label: string },
+  designRole: string,
+  textContent: Record<string, Record<string, string>>,
+  languages: string[],
+): string {
+  const config = getWeddingInlinePromptConfig(designType);
+  const exactFieldLines = config.fields
+    .map(({ field, label }) => renderFieldValue(field, label, textContent, languages))
+    .filter(Boolean)
+    .join("\n");
+
+  return `
+Create a professional, print-ready ${layoutGuide.description} for a ${ctx.tradition || "multicultural"} ${ctx.event || "celebration"}.
+
+You must typeset the provided text directly into the card artwork.
+
+ASPECT RATIO: ${layoutGuide.aspectRatio}
+STYLE: ${styleGuide.description}
+COLOR PALETTE: ${styleGuide.colors}
+SUITE PACK: ${suitePack.label}
+DESIGN ROLE IN PACK: ${designRole}
+
+CEREMONY CONTEXT:
+${ctx.lines}
+
+LANGUAGES: ${languages.join(", ")}
+
+MANDATORY TEXT RULES:
+- Use the exact text strings below verbatim.
+- Do not paraphrase, translate again, correct, improve, shorten, or expand any text.
+- Do not invent placeholder labels, RSVP fields, menu items, table numbers, or decorative copy unless they appear exactly in the provided text.
+- Do not add extra headings, blessings, captions, or filler words unless they are part of the exact text below.
+- Do not recreate the text with alternate spellings. Copy the exact strings only.
+- Keep all text crisp, elegant, and fully legible in the intended hierarchy.
+- If multiple languages are provided for the same field, stack them cleanly with the primary language most prominent.
+- If a field is not provided, leave that area decorative and empty instead of inventing content.
+
+PLACE THE EXACT TEXT IN THESE FIELDS:
+${exactFieldLines}
+
+LAYOUT INSTRUCTIONS:
+${config.instructions.map((line) => `- ${line}`).join("\n")}
+
+LAYOUT RULES:
+${layoutGuide.rules}
+
+CULTURAL REQUIREMENTS:
+${culturalGuide.rules}
+
+This must look like a finished luxury stationery design, not a blank template.
+`.trim();
+}
+
 function getBabyInlinePromptConfig(designType: string): {
   fields: Array<{ field: string; label: string }>;
   instructions: string[];
@@ -324,6 +378,148 @@ function getBabyInlinePromptConfig(designType: string): {
         instructions: [
           "Use a clear visual hierarchy with the baby's name most prominent.",
           "Typeset only the provided fields and leave all unused spaces empty.",
+        ],
+      };
+  }
+}
+
+function getWeddingInlinePromptConfig(designType: string): {
+  fields: Array<{ field: string; label: string }>;
+  instructions: string[];
+} {
+  switch (designType) {
+    case "WEDDING_INVITATION":
+      return {
+        fields: [
+          { field: "groomName", label: "Primary couple name area" },
+          { field: "brideName", label: "Secondary couple name area" },
+          { field: "date", label: "Date line" },
+          { field: "time", label: "Time line" },
+          { field: "venue", label: "Venue line" },
+          { field: "city", label: "City line" },
+          { field: "familyName", label: "Family line" },
+          { field: "additionalInfo", label: "Additional note line" },
+        ],
+        instructions: [
+          "Couple names are the hero and should dominate the card.",
+          "Date, time, venue, and city belong in a structured details block below.",
+          "Family names and additional note should stay secondary and elegant.",
+        ],
+      };
+    case "WEDDING_SAVE_THE_DATE":
+      return {
+        fields: [
+          { field: "date", label: "Hero date area" },
+          { field: "groomName", label: "Partner one name line" },
+          { field: "brideName", label: "Partner two name line" },
+          { field: "venue", label: "Venue line" },
+        ],
+        instructions: [
+          "The date is the single most prominent element.",
+          "Names are secondary and venue is optional support.",
+          "Keep the composition sparse, elegant, and teaser-like.",
+        ],
+      };
+    case "WEDDING_RSVP_CARD":
+      return {
+        fields: [
+          { field: "groomName", label: "Couple line" },
+          { field: "brideName", label: "Couple line continuation" },
+          { field: "date", label: "Event date line" },
+          { field: "venue", label: "Venue line" },
+          { field: "additionalInfo", label: "RSVP note area" },
+        ],
+        instructions: [
+          "Keep the layout clean and response-card-like.",
+          "Use the couple and event details as context, not as oversized hero text.",
+          "Do not invent response fields beyond the exact text provided.",
+        ],
+      };
+    case "WEDDING_MENU_CARD":
+      return {
+        fields: [
+          { field: "groomName", label: "Optional header name line" },
+          { field: "additionalInfo", label: "Main menu/message area" },
+        ],
+        instructions: [
+          "Treat the supplied text as the menu/message content.",
+          "Keep ornament restrained and typography refined.",
+          "Do not invent courses or dish names unless they are in the exact text provided.",
+        ],
+      };
+    case "WEDDING_TABLE_NUMBER":
+      return {
+        fields: [
+          { field: "additionalInfo", label: "Central table number / label area" },
+        ],
+        instructions: [
+          "Use one large centered text block only.",
+          "If no exact label is provided, leave the design decorative and minimal.",
+        ],
+      };
+    case "WEDDING_WELCOME_SIGN":
+      return {
+        fields: [
+          { field: "groomName", label: "Primary couple name area" },
+          { field: "brideName", label: "Secondary couple name area" },
+          { field: "date", label: "Date line" },
+          { field: "venue", label: "Venue line" },
+        ],
+        instructions: [
+          "This should feel grand and entrance-worthy.",
+          "Couple names are large and readable from a distance.",
+          "Date and venue stay secondary but still clear.",
+        ],
+      };
+    case "WEDDING_THANK_YOU":
+      return {
+        fields: [
+          { field: "groomName", label: "Partner one name area" },
+          { field: "brideName", label: "Partner two name area" },
+          { field: "additionalInfo", label: "Thank-you message area" },
+        ],
+        instructions: [
+          "Keep this warm, intimate, and lighter than the invitation.",
+          "The gratitude message is the emotional center.",
+          "Names should support the message, not overpower it.",
+        ],
+      };
+    case "WEDDING_INSTAGRAM_POST":
+      return {
+        fields: [
+          { field: "groomName", label: "Primary hero name area" },
+          { field: "brideName", label: "Secondary hero name area" },
+          { field: "date", label: "Supporting date line" },
+        ],
+        instructions: [
+          "Make the couple names immediately readable on social.",
+          "Keep copy minimal and high-impact.",
+          "Do not overload the canvas with supporting details.",
+        ],
+      };
+    case "WEDDING_WHATSAPP_CARD":
+      return {
+        fields: [
+          { field: "groomName", label: "Primary hero name area" },
+          { field: "brideName", label: "Secondary hero name area" },
+          { field: "date", label: "Date line" },
+          { field: "venue", label: "Venue line" },
+        ],
+        instructions: [
+          "Optimize for quick reading on a phone screen.",
+          "Names should be large and date/venue should be clear and compact.",
+          "Avoid clutter and keep the card teaser-like.",
+        ],
+      };
+    default:
+      return {
+        fields: Object.keys(textContentFieldOrder).map((field) => ({
+          field,
+          label: field,
+        })),
+        instructions: [
+          "Use a clear visual hierarchy with the most important names or details most prominent.",
+          "Typeset only the provided fields and leave unused areas empty.",
         ],
       };
   }
