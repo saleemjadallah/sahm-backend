@@ -78,20 +78,17 @@ export async function generateSuite(
   // Map designType -> record for easy lookup
   const recordByType = new Map(designRecords.map((r) => [r.designType, r]));
 
-  // Shared text compositing config
-  const textOpts: TextCompositeOpts = {
-    textFree: pieces[0]?.textFree ?? false,
-    designType: "", // set per piece
-    textContent,
-    languages,
-  };
-
   // ── Step 1: Generate hero piece ──
   const heroRecord = recordByType.get(heroSpec.designType)!;
   const { design: heroDesign, rawBuffer: heroBuffer } = await generateOne(
     prisma, heroRecord, project.id,
     { prompt: heroSpec.prompt.contentPrompt, systemPrompt: heroSpec.prompt.systemPrompt, aspectRatio: heroSpec.aspectRatio, imageSize: HERO_SIZE },
-    { ...textOpts, designType: heroSpec.designType },
+    {
+      textFree: heroSpec.textFree,
+      designType: heroSpec.designType,
+      textContent,
+      languages,
+    },
   );
 
   // ── Step 2: Generate remaining pieces with hero as style reference ──
@@ -103,7 +100,12 @@ export async function generateSuite(
       return generateOne(
         prisma, record, project.id,
         { prompt: suitePrompt, systemPrompt: spec.prompt.systemPrompt, aspectRatio: spec.aspectRatio, imageSize: STANDARD_SIZE, referenceImage: heroBuffer },
-        { ...textOpts, designType: spec.designType },
+        {
+          textFree: spec.textFree,
+          designType: spec.designType,
+          textContent,
+          languages,
+        },
       );
     }),
   );

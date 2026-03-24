@@ -14,9 +14,8 @@ export interface DesignPrompt {
 /**
  * Build the Gemini prompt for a design generation request.
  *
- * When languages include Arabic or Hindi, generates a text-free background
- * (text composited later via Sharp). English-only designs can render text
- * natively in the image for simpler output.
+ * Always generate a text-free background and composite exact text later.
+ * This avoids placeholder or hallucinated typography from the image model.
  */
 export function buildDesignPrompt(
   projectType: string,
@@ -35,8 +34,8 @@ export function buildDesignPrompt(
 
   if (!layoutGuide) throw new Error(`Unknown design type: ${designType}`);
 
-  // Use text-free mode when Arabic or Hindi are included
-  const textFree = languages.includes("ar") || languages.includes("hi");
+  // Always composite text programmatically so final copy is exact.
+  const textFree = true;
 
   const contentPrompt = textFree
     ? buildBackgroundPrompt(layoutGuide, styleGuide, culturalGuide, ceremonyContext, suitePack, designRole, designType, languages)
