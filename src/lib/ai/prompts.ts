@@ -199,6 +199,7 @@ MANDATORY TEXT RULES:
 - Keep all text crisp, elegant, and fully legible inside the intended decorative frames.
 - If multiple languages are provided for the same field, stack them cleanly within the same frame with the primary language most prominent.
 - Prefer fewer, better text blocks over clutter. If a field is not provided, leave that space decorative and empty.
+${config.typographyRules.map((line) => `- ${line}`).join("\n")}
 
 PLACE THE EXACT TEXT IN THESE FIELDS:
 ${exactFieldLines}
@@ -278,6 +279,7 @@ This must look like a finished luxury stationery design, not a blank template.
 function getBabyInlinePromptConfig(designType: string): {
   fields: Array<{ field: string; label: string }>;
   instructions: string[];
+  typographyRules: string[];
 } {
   switch (designType) {
     case "BABY_BIRTH_ANNOUNCEMENT":
@@ -298,6 +300,11 @@ function getBabyInlinePromptConfig(designType: string): {
           "Bottom rectangular message panel: additional note only.",
           "Leave unused frames empty if no exact text is provided for that field.",
         ],
+        typographyRules: [
+          "For Arabic-script text on this card only, render the Arabic lines in elegant calligraphic styling while preserving the exact letters, spacing intent, and RTL reading order.",
+          "Do not rewrite, summarize, ornamentally substitute, or regenerate any Arabic words. The calligraphic treatment must use the exact provided Arabic strings only.",
+          "Especially in the hero name area, make the Arabic line feel like premium keepsake calligraphy while remaining fully legible and faithful to the provided text.",
+        ],
       };
     case "BABY_NURSERY_ART":
       return {
@@ -311,6 +318,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Any supporting note must stay small, subtle, and secondary.",
           "Do not force birth stats onto this design unless they fit elegantly.",
         ],
+        typographyRules: [],
       };
     case "BABY_AQEEQAH_INVITE":
       return {
@@ -327,6 +335,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Use the family line as a hosting signature, not the main headline.",
           "If there is no exact ceremony heading provided, do not invent one.",
         ],
+        typographyRules: [],
       };
     case "BABY_MILESTONE_CARD":
       return {
@@ -339,6 +348,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Keep the composition simple and high-contrast for social sharing.",
           "Do not introduce extra baby stats or family details unless they are explicitly provided and fit cleanly.",
         ],
+        typographyRules: [],
       };
     case "BABY_WHATSAPP_CARD":
       return {
@@ -355,6 +365,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Use the family line as a secondary supporting element.",
           "Avoid clutter and leave unused decorative areas empty.",
         ],
+        typographyRules: [],
       };
     case "BABY_THANK_YOU":
       return {
@@ -368,6 +379,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Baby name first, message second, family signature last.",
           "Keep the wording intimate and spacious, with generous breathing room.",
         ],
+        typographyRules: [],
       };
     default:
       return {
@@ -379,6 +391,7 @@ function getBabyInlinePromptConfig(designType: string): {
           "Use a clear visual hierarchy with the baby's name most prominent.",
           "Typeset only the provided fields and leave all unused spaces empty.",
         ],
+        typographyRules: [],
       };
   }
 }
