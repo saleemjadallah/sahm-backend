@@ -10,14 +10,21 @@ import { StorageError } from "../../errors/index.js";
 
 // ─── S3-Compatible Client for Cloudflare R2 ────────────
 
-const s3Client = new S3Client({
-  region: "auto",
-  endpoint: env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: env.R2_ACCESS_KEY,
-    secretAccessKey: env.R2_SECRET_KEY,
-  },
-});
+let _s3: S3Client | null = null;
+function getS3(): S3Client {
+  if (!_s3) {
+    if (!env.R2_ENDPOINT || !env.R2_ACCESS_KEY) throw new StorageError("R2 storage is not configured");
+    _s3 = new S3Client({
+      region: "auto",
+      endpoint: env.R2_ENDPOINT,
+      credentials: {
+        accessKeyId: env.R2_ACCESS_KEY,
+        secretAccessKey: env.R2_SECRET_KEY,
+      },
+    });
+  }
+  return _s3;
+}
 
 /**
  * Upload a file to R2.
@@ -29,7 +36,7 @@ export async function uploadFile(
   contentType: string,
 ): Promise<string> {
   try {
-    await s3Client.send(
+    await getS3().send(
       new PutObjectCommand({
         Bucket: env.R2_BUCKET,
         Key: key,
@@ -63,7 +70,7 @@ export async function getSignedUrl(
       Key: key,
     });
 
-    return await awsGetSignedUrl(s3Client, command, { expiresIn });
+    return await awsGetSignedUrl(getS3(), command, { expiresIn });
   } catch (err) {
     throw new StorageError(
       `Failed to generate signed URL for: ${key}`,
@@ -77,7 +84,7 @@ export async function getSignedUrl(
  */
 export async function deleteFile(key: string): Promise<void> {
   try {
-    await s3Client.send(
+    await getS3().send(
       new DeleteObjectCommand({
         Bucket: env.R2_BUCKET,
         Key: key,

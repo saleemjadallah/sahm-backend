@@ -1,7 +1,14 @@
 import { Resend } from "resend";
 import { env } from "../config/env.js";
 
-const resend = new Resend(env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    if (!env.RESEND_API_KEY) throw new Error("Resend is not configured");
+    _resend = new Resend(env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 interface EmailOptions {
   to: string;
@@ -18,7 +25,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
   const { to, subject, html, from, replyTo } = options;
 
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: from || env.EMAIL_FROM,
       to,
       subject,

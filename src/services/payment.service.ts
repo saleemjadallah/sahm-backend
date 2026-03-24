@@ -5,9 +5,14 @@ import { PRICING } from "../config/constants.js";
 import { NotFoundError, PaymentError, ValidationError } from "../errors/index.js";
 import type { CheckoutRequest, CheckoutResponse } from "../types/index.js";
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-02-24.acacia",
-});
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!_stripe) {
+    if (!env.STRIPE_SECRET_KEY) throw new PaymentError("Stripe is not configured");
+    _stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: "2025-02-24.acacia" });
+  }
+  return _stripe;
+}
 
 // ─── Pricing Map ───────────────────────────────────────
 
@@ -86,7 +91,7 @@ export async function createCheckoutSession(
   }
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: "payment",
       currency: "aed",
       line_items: [
@@ -171,7 +176,7 @@ export function constructWebhookEvent(
   payload: string | Buffer,
   signature: string,
 ): Stripe.Event {
-  return stripe.webhooks.constructEvent(
+  return getStripe().webhooks.constructEvent(
     payload,
     signature,
     env.STRIPE_WEBHOOK_SECRET,

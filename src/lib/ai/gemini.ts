@@ -2,9 +2,16 @@ import { GoogleGenAI, type Part } from "@google/genai";
 import { env } from "../../config/env.js";
 import { GeminiError } from "../../errors/index.js";
 
-// ─── Initialize Gemini Client ──────────────────────────
+// ─── Initialize Gemini Client (lazy) ───────────────────
 
-const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+let _ai: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+  if (!_ai) {
+    if (!env.GEMINI_API_KEY) throw new GeminiError("Gemini API key is not configured");
+    _ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  }
+  return _ai;
+}
 
 // ─── Concurrency Limiter (Semaphore Pattern) ───────────
 
@@ -109,7 +116,7 @@ export async function generateDesignImage(opts: GenerateImageOpts): Promise<Buff
 
       parts.push({ text: opts.prompt });
 
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: env.GEMINI_IMAGE_MODEL,
         ...(opts.systemPrompt ? { systemInstruction: opts.systemPrompt } : {}),
         contents: [{ role: "user", parts }],
@@ -137,7 +144,7 @@ export async function callGeminiText(prompt: string): Promise<string> {
 
   try {
     return await withRetry(async () => {
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: env.GEMINI_MODEL,
         contents: prompt,
       });
