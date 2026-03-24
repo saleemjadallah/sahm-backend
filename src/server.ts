@@ -27,6 +27,29 @@ import { rsvpRoutes } from "./routes/rsvp/index.js";
 import { guestRoutes } from "./routes/guests/index.js";
 import { milestoneRoutes } from "./routes/milestones/index.js";
 
+function getAllowedFrontendOrigins(frontendUrl: string): string[] {
+  const normalized = frontendUrl.replace(/\/+$/, "");
+  const origins = new Set([normalized]);
+
+  try {
+    const url = new URL(normalized);
+    const { protocol, hostname, port } = url;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+
+    if (!isLocalhost) {
+      const alternateHostname = hostname.startsWith("www.")
+        ? hostname.slice(4)
+        : `www.${hostname}`;
+      const alternateOrigin = `${protocol}//${alternateHostname}${port ? `:${port}` : ""}`;
+      origins.add(alternateOrigin);
+    }
+  } catch {
+    // Fall back to the explicitly configured origin only.
+  }
+
+  return [...origins];
+}
+
 // ─── Build Server ────────────────────────────────────────
 
 async function buildServer() {
@@ -53,8 +76,9 @@ async function buildServer() {
   // ─── Plugins ────────────────────────────────────────────
 
   // CORS — allow frontend origin
+  const allowedOrigins = getAllowedFrontendOrigins(env.FRONTEND_URL);
   await fastify.register(cors, {
-    origin: [env.FRONTEND_URL],
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
