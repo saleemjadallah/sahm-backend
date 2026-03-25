@@ -3,7 +3,7 @@ import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js
 import { buildGenerationPrompt } from "../lib/ai/prompts.js";
 import { getCategory } from "../lib/categories/index.js";
 import { processGeneratedImage } from "./image.service.js";
-import { debitCredits, refundCredits } from "./credit.service.js";
+import { debitCreditsInTransaction } from "./credit.service.js";
 import { NotFoundError, GeminiError, ValidationError } from "../errors/index.js";
 import type {
   CategoryPromptConfig,
@@ -56,13 +56,10 @@ export async function generateSingle(
   const resolvedResolution =
     selectedOutputFormat?.resolution || outputSpecs?.defaultResolution || "2k";
 
-  // Determine credit cost
+  // Determine the cost to unlock download/share/export after generation completes.
   const creditsCost =
     selectedOutputFormat?.creditsCost
     ?? (resolvedResolution.toLowerCase() === "4k" ? 2 : 1);
-
-  // Debit credits (throws InsufficientCreditsError if not enough)
-  await debitCredits(prisma, userId, creditsCost, "GENERATION", undefined, `Generate ${categoryId}`);
 
   // Create generation record
   const generation = await prisma.generation.create({
@@ -138,11 +135,6 @@ export async function generateSingle(
       data: { status: "FAILED" },
     });
 
-    // Refund credits on failure
-    await refundCredits(prisma, userId, creditsCost, generation.id).catch((refundErr) => {
-      console.error(`[generation] refund failed for ${generation.id}:`, refundErr);
-    });
-
     throw new GeminiError("Failed to generate image", {
       generationId: generation.id,
       originalError: err instanceof Error ? err.message : String(err),
@@ -170,11 +162,6 @@ export async function generatePack(
   const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const resolvedStyle = style || "modern";
   assertStyleAllowed(category.styleOptions as string[] | null, resolvedStyle, category.id);
-  const totalCost = items.length;
-
-  // Debit credits for the whole pack
-  await debitCredits(prisma, userId, totalCost, "PACK_GENERATION", undefined, `Pack: ${categoryId} x${items.length}`);
-
   // Create pack
   const pack = await prisma.pack.create({
     data: {
@@ -327,14 +314,6 @@ export async function generatePack(
     orderBy: { createdAt: "asc" },
   });
 
-  // Refund credits for failed items
-  const failedCount = finalGenerations.filter((g) => g.status === "FAILED").length;
-  if (failedCount > 0) {
-    await refundCredits(prisma, userId, failedCount, pack.id).catch((err) => {
-      console.error(`[pack] refund failed for pack ${pack.id}:`, err);
-    });
-  }
-
   return { packId: pack.id, generations: finalGenerations };
 }
 
@@ -364,11 +343,6 @@ export async function regenerateGeneration(
 
   const resolvedStyle = newStyle || generation.style || "modern";
   assertStyleAllowed(category.styleOptions as string[] | null, resolvedStyle, category.id);
-  const creditsCost = 1;
-
-  // Debit credits
-  await debitCredits(prisma, userId, creditsCost, "GENERATION", generationId, `Regenerate ${generationId}`);
-
   await prisma.generation.update({
     where: { id: generationId },
     data: { status: "GENERATING", style: resolvedStyle },
@@ -412,6 +386,7 @@ export async function regenerateGeneration(
         previewUrl,
         fullUrl,
         status: "COMPLETED",
+        isDownloaded: false,
         resolvedPrompt: prompt.contentPrompt,
         style: resolvedStyle,
         userPrompt: newPrompt ?? generation.userPrompt,
@@ -420,15 +395,48 @@ export async function regenerateGeneration(
   } catch (err) {
     await prisma.generation.update({ where: { id: generationId }, data: { status: "FAILED" } });
 
-    await refundCredits(prisma, userId, creditsCost, generationId).catch((refundErr) => {
-      console.error(`[generation] refund failed for regen ${generationId}:`, refundErr);
-    });
-
     throw new GeminiError("Failed to regenerate image", {
       generationId,
       originalError: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+export async function unlockGenerationExport(
+  prisma: PrismaClient,
+  userId: string,
+  generationId: string,
+): Promise<Generation> {
+  return prisma.$transaction(async (tx) => {
+    const generation = await tx.generation.findFirst({
+      where: { id: generationId, userId },
+    });
+
+    if (!generation) throw new NotFoundError("Generation");
+    if (generation.status !== "COMPLETED" || !generation.fullUrl) {
+      throw new ValidationError("Generation is not ready to unlock for export");
+    }
+
+    if (generation.isDownloaded) {
+      return generation;
+    }
+
+    if (generation.creditsCost > 0) {
+      await debitCreditsInTransaction(
+        tx,
+        userId,
+        generation.creditsCost,
+        "GENERATION",
+        generation.id,
+        `Unlock export for ${generation.id}`,
+      );
+    }
+
+    return tx.generation.update({
+      where: { id: generation.id },
+      data: { isDownloaded: true },
+    });
+  });
 }
 
 function resolveOutputFormat(

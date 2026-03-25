@@ -1,5 +1,7 @@
-import type { PrismaClient, CreditTransaction, CreditTxnType } from "@prisma/client";
+import type { PrismaClient, CreditTransaction, CreditTxnType, Prisma } from "@prisma/client";
 import { InsufficientCreditsError } from "../errors/index.js";
+
+type CreditDbClient = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Get current credit balance for a user.
@@ -33,39 +35,20 @@ export async function debitCredits(
   referenceId?: string,
   description?: string,
 ): Promise<CreditTransaction> {
-  return prisma.$transaction(async (tx) => {
-    const bal = await tx.creditBalance.upsert({
-      where: { userId },
-      update: {},
-      create: { userId, balance: 0, lifetimeEarned: 0, lifetimeSpent: 0 },
-    });
+  return prisma.$transaction((tx) =>
+    debitCreditsInTransaction(tx, userId, amount, type, referenceId, description),
+  );
+}
 
-    if (bal.balance < amount) {
-      throw new InsufficientCreditsError(amount, bal.balance);
-    }
-
-    const newBalance = bal.balance - amount;
-
-    await tx.creditBalance.update({
-      where: { userId },
-      data: {
-        balance: newBalance,
-        lifetimeSpent: { increment: amount },
-      },
-    });
-
-    return tx.creditTransaction.create({
-      data: {
-        userId,
-        type,
-        amount: -amount,
-        balance: newBalance,
-        generationId: type === "GENERATION" ? referenceId : undefined,
-        packId: type === "PACK_GENERATION" ? referenceId : undefined,
-        description: description || `Spent ${amount} credit(s)`,
-      },
-    });
-  });
+export async function debitCreditsInTransaction(
+  prisma: Prisma.TransactionClient,
+  userId: string,
+  amount: number,
+  type: CreditTxnType,
+  referenceId?: string,
+  description?: string,
+): Promise<CreditTransaction> {
+  return debitCreditsInternal(prisma, userId, amount, type, referenceId, description);
 }
 
 /**
@@ -174,4 +157,45 @@ export async function grantSignupBonus(
     undefined,
     "Welcome bonus credits",
   );
+}
+
+async function debitCreditsInternal(
+  prisma: CreditDbClient,
+  userId: string,
+  amount: number,
+  type: CreditTxnType,
+  referenceId?: string,
+  description?: string,
+): Promise<CreditTransaction> {
+  const bal = await prisma.creditBalance.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, balance: 0, lifetimeEarned: 0, lifetimeSpent: 0 },
+  });
+
+  if (bal.balance < amount) {
+    throw new InsufficientCreditsError(amount, bal.balance);
+  }
+
+  const newBalance = bal.balance - amount;
+
+  await prisma.creditBalance.update({
+    where: { userId },
+    data: {
+      balance: newBalance,
+      lifetimeSpent: { increment: amount },
+    },
+  });
+
+  return prisma.creditTransaction.create({
+    data: {
+      userId,
+      type,
+      amount: -amount,
+      balance: newBalance,
+      generationId: type === "GENERATION" ? referenceId : undefined,
+      packId: type === "PACK_GENERATION" ? referenceId : undefined,
+      description: description || `Spent ${amount} credit(s)`,
+    },
+  });
 }

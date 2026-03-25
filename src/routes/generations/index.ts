@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../../middleware/requireAuth.js";
-import { generateSingle, regenerateGeneration } from "../../services/generation.service.js";
+import {
+  generateSingle,
+  regenerateGeneration,
+  unlockGenerationExport,
+} from "../../services/generation.service.js";
 import { NotFoundError } from "../../errors/index.js";
 import type { GenerateRequest, RegenerateRequest, GenerationResponse } from "../../types/index.js";
 
@@ -27,7 +31,7 @@ function toResponse(g: {
     style: g.style,
     aspectRatio: g.aspectRatio,
     previewUrl: g.previewUrl,
-    fullUrl: g.fullUrl,
+    fullUrl: g.isDownloaded ? g.fullUrl : null,
     status: g.status as GenerationResponse["status"],
     creditsCost: g.creditsCost,
     packId: g.packId,
@@ -108,6 +112,20 @@ export async function generationRoutes(fastify: FastifyInstance) {
         request.params.id,
         style,
         userPrompt,
+      );
+      return reply.send({ success: true, data: toResponse(generation) });
+    },
+  );
+
+  // POST /api/generations/:id/unlock-export — spend credits on first export access
+  fastify.post<{ Params: { id: string } }>(
+    "/:id/unlock-export",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const generation = await unlockGenerationExport(
+        fastify.prisma,
+        request.userId!,
+        request.params.id,
       );
       return reply.send({ success: true, data: toResponse(generation) });
     },
