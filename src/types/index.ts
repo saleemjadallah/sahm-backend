@@ -74,6 +74,7 @@ export interface GenerateRequest {
   style?: string;
   aspectRatio?: string;
   metadata?: Record<string, unknown>;
+  promptVariant?: string;
 }
 
 export interface GenerationResponse {
@@ -95,6 +96,7 @@ export interface GenerationResponse {
 export interface RegenerateRequest {
   style?: string;
   userPrompt?: string;
+  promptVariant?: string;
 }
 
 // ─── Pack ─────────────────────────────────────────────

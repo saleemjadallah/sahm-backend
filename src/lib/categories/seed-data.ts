@@ -4,7 +4,13 @@
  *
  * This is the product definition layer. Each category is essentially a
  * prompt library + metadata schema + style options + output specs.
+ *
+ * Prompt content is enhanced by the prompt database (prompt-database.ts).
+ * The main variant's prompts are applied to each category at export time,
+ * so the DB seed always contains the latest optimized prompts.
  */
+
+import { PROMPT_DATABASE } from "../ai/prompt-database.js";
 
 export interface CategoryPromptConfig {
   systemPrompt: string;
@@ -1404,3 +1410,37 @@ export const CATEGORIES: CategorySeed[] = [
     ],
   },
 ];
+
+// ─── Apply Enhanced Prompts from Database ───────────────
+
+/**
+ * Enhance CATEGORIES with main-variant prompts from the prompt database.
+ * This ensures the DB seed always contains the latest Gemini-optimized prompts.
+ */
+function applyPromptDatabaseEnhancements(categories: CategorySeed[]): void {
+  for (const category of categories) {
+    const dbEntry = PROMPT_DATABASE.find((p) => p.categoryId === category.id);
+    if (!dbEntry) continue;
+
+    // Use main variant's prompts for the category config
+    const mainVariant = dbEntry.variants.find((v) => v.id === "main");
+    if (mainVariant) {
+      category.promptConfig.systemPrompt = mainVariant.systemPrompt;
+      category.promptConfig.contextTemplate = mainVariant.contextTemplate;
+      category.promptConfig.outputGuidance = mainVariant.outputGuidance;
+      category.promptConfig.negativeGuidance = mainVariant.negativeGuidance;
+    }
+
+    // Use enhanced subcategory prompts
+    for (const subcategory of category.subcategories) {
+      const dbSubcat = dbEntry.subcategories.find(
+        (s) => s.subcategoryId === subcategory.id,
+      );
+      if (dbSubcat) {
+        subcategory.promptTemplate = dbSubcat.promptTemplate;
+      }
+    }
+  }
+}
+
+applyPromptDatabaseEnhancements(CATEGORIES);

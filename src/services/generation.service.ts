@@ -19,7 +19,7 @@ export async function generateSingle(
   userId: string,
   req: GenerateRequest,
 ): Promise<Generation> {
-  const { categoryId, subcategoryId, userPrompt, style, aspectRatio, metadata } = req;
+  const { categoryId, subcategoryId, userPrompt, style, aspectRatio, metadata, promptVariant } = req;
 
   // Load category config
   const category = await getCategory(prisma, categoryId);
@@ -64,12 +64,17 @@ export async function generateSingle(
     resolvedStyle,
     metadata ?? null,
     resolvedAspect,
+    { categoryId, subcategoryId: subcategory?.id, promptVariant },
   );
 
-  // Update record with resolved prompt
+  // Update record with resolved prompt (include variant ID for tracking)
   await prisma.generation.update({
     where: { id: generation.id },
-    data: { resolvedPrompt: prompt.contentPrompt },
+    data: {
+      resolvedPrompt: prompt.variantId
+        ? `[variant:${prompt.variantId}] ${prompt.contentPrompt}`
+        : prompt.contentPrompt,
+    },
   });
 
   // Generate image async (don't await in the request cycle for real usage,
@@ -188,6 +193,7 @@ export async function generatePack(
     resolvedStyle,
     (heroGen.metadata as Record<string, unknown>) ?? null,
     heroGen.aspectRatio,
+    { categoryId: category.id, subcategoryId: heroSubcat?.id },
   );
 
   let heroBuffer: Buffer | undefined;
@@ -233,6 +239,7 @@ export async function generatePack(
         resolvedStyle,
         (gen.metadata as Record<string, unknown>) ?? null,
         gen.aspectRatio,
+        { categoryId: category.id, subcategoryId: subcat?.id },
       );
 
       const styleRef = heroBuffer
@@ -330,6 +337,7 @@ export async function regenerateGeneration(
     resolvedStyle,
     (generation.metadata as Record<string, unknown>) ?? null,
     generation.aspectRatio,
+    { categoryId: generation.categoryId, subcategoryId: subcategory?.id },
   );
 
   try {

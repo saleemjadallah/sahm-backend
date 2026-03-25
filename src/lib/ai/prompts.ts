@@ -1,14 +1,29 @@
 import { STYLE_GUIDES } from "./style-guides.js";
 import type { CategoryPromptConfig } from "../categories/seed-data.js";
+import {
+  getCategoryPrompts,
+  getSubcategoryPrompt,
+  selectVariant,
+} from "./prompt-selector.js";
 
 export interface GenerationPrompt {
   systemPrompt: string;
   contentPrompt: string;
+  variantId?: string;
+}
+
+export interface PromptOptions {
+  categoryId?: string;
+  subcategoryId?: string;
+  promptVariant?: string;
 }
 
 /**
  * Build the Gemini prompt for any category generation.
- * Replaces the old ceremony-specific prompt builder.
+ *
+ * When a categoryId is provided and found in the prompt database,
+ * uses enhanced Gemini-optimized prompts with variant selection.
+ * Falls back to the original categoryConfig if not found.
  */
 export function buildGenerationPrompt(
   categoryConfig: CategoryPromptConfig,
@@ -17,23 +32,63 @@ export function buildGenerationPrompt(
   style: string,
   metadata: Record<string, unknown> | null,
   aspectRatio: string,
+  options?: PromptOptions,
 ): GenerationPrompt {
   const styleGuide = STYLE_GUIDES[style] || STYLE_GUIDES.modern;
 
+  // Try to use enhanced prompts from the prompt database
+  let activeSystemPrompt = categoryConfig.systemPrompt;
+  let activeContextTemplate = categoryConfig.contextTemplate;
+  let activeOutputGuidance = categoryConfig.outputGuidance;
+  let activeNegativeGuidance = categoryConfig.negativeGuidance;
+  let activeSubcategoryPrompt = subcategoryPrompt;
+  let variantId: string | undefined;
+
+  if (options?.categoryId) {
+    const categoryPrompts = getCategoryPrompts(options.categoryId);
+    if (categoryPrompts) {
+      // Select a variant (weighted random or explicit)
+      const variant = selectVariant(
+        categoryPrompts.variants,
+        options.promptVariant,
+      );
+      variantId = variant.id;
+
+      activeSystemPrompt = variant.systemPrompt;
+      activeContextTemplate = variant.contextTemplate;
+      activeOutputGuidance = variant.outputGuidance;
+      activeNegativeGuidance = variant.negativeGuidance;
+
+      // Use enhanced subcategory prompt if available
+      if (options.subcategoryId) {
+        const enhancedSubPrompt = getSubcategoryPrompt(
+          categoryPrompts,
+          options.subcategoryId,
+        );
+        if (enhancedSubPrompt) {
+          activeSubcategoryPrompt = enhancedSubPrompt;
+        }
+      }
+    }
+  }
+
   // System prompt = category persona + style persona
-  const systemPrompt = `${categoryConfig.systemPrompt}\n\n${styleGuide.systemPrompt}`;
+  const systemPrompt = `${activeSystemPrompt}\n\n${styleGuide.systemPrompt}`;
 
   // Build content prompt from pieces
   const parts: string[] = [];
 
   // 1. Category context template filled with metadata
   if (metadata) {
-    parts.push(fillTemplate(categoryConfig.contextTemplate, metadata));
+    parts.push(fillTemplate(activeContextTemplate, metadata));
   }
 
-  // 2. Subcategory-specific prompt fragment
-  if (subcategoryPrompt) {
-    parts.push(subcategoryPrompt);
+  // 2. Subcategory-specific prompt fragment (also fill with metadata)
+  if (activeSubcategoryPrompt) {
+    const filledSubPrompt = metadata
+      ? fillTemplate(activeSubcategoryPrompt, metadata)
+      : activeSubcategoryPrompt;
+    parts.push(filledSubPrompt);
   }
 
   // 3. User's free-text prompt
@@ -49,16 +104,21 @@ export function buildGenerationPrompt(
   parts.push(`Output aspect ratio: ${aspectRatio}`);
 
   // 6. Output guidance
-  parts.push(categoryConfig.outputGuidance);
+  if (activeOutputGuidance) {
+    const filledGuidance = metadata
+      ? fillTemplate(activeOutputGuidance, metadata)
+      : activeOutputGuidance;
+    parts.push(filledGuidance);
+  }
 
-  // 7. Negative guidance
-  if (categoryConfig.negativeGuidance) {
-    parts.push(`IMPORTANT — do NOT: ${categoryConfig.negativeGuidance}`);
+  // 7. Quality guidance (positive framing)
+  if (activeNegativeGuidance) {
+    parts.push(`Quality guidance: ${activeNegativeGuidance}`);
   }
 
   const contentPrompt = parts.filter(Boolean).join("\n\n");
 
-  return { systemPrompt, contentPrompt };
+  return { systemPrompt, contentPrompt, variantId };
 }
 
 /**
