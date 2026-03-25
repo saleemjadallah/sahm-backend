@@ -18,14 +18,12 @@ import { RATE_LIMITS, UPLOAD_LIMITS } from "./config/constants.js";
 
 // Route imports
 import { authRoutes } from "./routes/auth/index.js";
-import { projectRoutes } from "./routes/projects/index.js";
-import { designRoutes, generateSuiteRoute } from "./routes/designs/index.js";
+import { categoryRoutes } from "./routes/categories/index.js";
+import { generationRoutes } from "./routes/generations/index.js";
+import { packRoutes } from "./routes/packs/index.js";
+import { creditRoutes } from "./routes/credits/index.js";
 import { translateRoutes } from "./routes/translate/index.js";
-import { paymentRoutes } from "./routes/payments/index.js";
 import { webhookRoute } from "./routes/payments/webhook.js";
-import { rsvpRoutes } from "./routes/rsvp/index.js";
-import { guestRoutes } from "./routes/guests/index.js";
-import { milestoneRoutes } from "./routes/milestones/index.js";
 
 function getAllowedFrontendOrigins(frontendUrl: string): string[] {
   const normalized = frontendUrl.replace(/\/+$/, "");
@@ -109,9 +107,9 @@ async function buildServer() {
   await fastify.register(swagger, {
     openapi: {
       info: {
-        title: "Sahm API \u0633\u0647\u0645",
-        description: "Gulf Life Moments Platform \u2014 API Documentation",
-        version: "0.1.0",
+        title: "Sahm API سهم",
+        description: "AI Photo Studio — API Documentation",
+        version: "2.0.0",
       },
       servers: [
         {
@@ -151,7 +149,7 @@ async function buildServer() {
   fastify.get("/health", async () => ({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "0.1.0",
+    version: "2.0.0",
   }));
 
   // API routes under /api prefix
@@ -160,32 +158,35 @@ async function buildServer() {
       // Auth: /api/auth/*
       await api.register(authRoutes, { prefix: "/auth" });
 
-      // Projects: /api/projects/*
-      await api.register(projectRoutes, { prefix: "/projects" });
+      // Categories: /api/categories/* (public)
+      await api.register(categoryRoutes, { prefix: "/categories" });
 
-      // Generate suite lives under /api/projects/:id/generate
-      await api.register(generateSuiteRoute, { prefix: "/projects" });
+      // Generations: /api/generations/* + POST /api/generate
+      await api.register(generationRoutes, { prefix: "/generations" });
 
-      // Designs: /api/designs/*
-      await api.register(designRoutes, { prefix: "/designs" });
+      // The main generate endpoint also at /api/generate for convenience
+      await api.register(
+        async function (gen) {
+          gen.post("/", { preHandler: [(await import("./middleware/requireAuth.js")).requireAuth] }, async (request, reply) => {
+            const { generateSingle } = await import("./services/generation.service.js");
+            const generation = await generateSingle(gen.prisma, request.userId!, request.body as Parameters<typeof generateSingle>[2]);
+            return reply.code(201).send({ success: true, data: generation });
+          });
+        },
+        { prefix: "/generate" },
+      );
+
+      // Packs: /api/packs/*
+      await api.register(packRoutes, { prefix: "/packs" });
+
+      // Credits: /api/credits/*
+      await api.register(creditRoutes, { prefix: "/credits" });
 
       // Translate: /api/translate/*
       await api.register(translateRoutes, { prefix: "/translate" });
 
-      // Payments: /api/payments/*
-      await api.register(paymentRoutes, { prefix: "/payments" });
-
-      // Stripe webhook: /api/webhooks/stripe (separate from payment routes, no auth)
+      // Stripe webhook: /api/webhooks/stripe
       await api.register(webhookRoute, { prefix: "/webhooks" });
-
-      // RSVP (public): /api/rsvp/*
-      await api.register(rsvpRoutes, { prefix: "/rsvp" });
-
-      // Guests: /api/projects/:projectId/guests/*
-      await api.register(guestRoutes, { prefix: "/projects" });
-
-      // Milestones: /api/projects/:projectId/milestones/*
-      await api.register(milestoneRoutes, { prefix: "/projects" });
     },
     { prefix: "/api" },
   );

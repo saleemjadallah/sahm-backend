@@ -12,5 +12,7 @@ declare module "fastify" {
 
   interface FastifyRequest {
     user?: AuthUser;
+    /** Shortcut — set by requireAuth after authentication */
+    userId?: string;
   }
 }

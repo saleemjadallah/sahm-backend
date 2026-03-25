@@ -3,7 +3,7 @@ import { UnauthorizedError } from "../errors/index.js";
 
 /**
  * Simple preHandler that returns 401 if no authenticated user is on the request.
- * Use this on routes that require authentication.
+ * Sets request.userId as a convenience shortcut.
  */
 export async function requireAuth(
   request: FastifyRequest,
@@ -12,4 +12,5 @@ export async function requireAuth(
   if (!request.user) {
     throw new UnauthorizedError("Authentication required");
   }
+  request.userId = request.user.id;
 }

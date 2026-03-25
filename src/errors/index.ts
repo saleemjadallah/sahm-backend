@@ -37,6 +37,18 @@ export class UnauthorizedError extends AppError {
   }
 }
 
+export class InsufficientCreditsError extends AppError {
+  constructor(required: number, available: number) {
+    super(
+      `Insufficient credits: ${required} required, ${available} available`,
+      402,
+      "INSUFFICIENT_CREDITS",
+      true,
+      { required, available },
+    );
+  }
+}
+
 export class ForbiddenError extends AppError {
   constructor(message = "Insufficient permissions") {
     super(message, 403, "FORBIDDEN");

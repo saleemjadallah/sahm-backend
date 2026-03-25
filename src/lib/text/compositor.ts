@@ -1,6 +1,32 @@
 import sharp from "sharp";
 import { buildFontFaces, getFontFamily, fontForLang, type FontKey } from "./fonts.js";
-import { getTextLayout, type TextZone } from "./layout.js";
+
+// TextZone type — previously in layout.ts, now inline since layouts are category-driven
+export interface TextZone {
+  field: string;
+  yPct: number;
+  fontSizePct: number;
+  fontSizeMaxPct?: number;
+  fontSizeMinPct?: number;
+  fontRole: "display" | "body";
+  fontKey?: FontKey;
+  color: string;
+  align: "center" | "left" | "right";
+  maxWidthPct: number;
+  secondaryScale: number;
+  lineClamp?: number;
+  box?: {
+    xPct: number;
+    yPct: number;
+    widthPct: number;
+    heightPct: number;
+    paddingPct?: number;
+  };
+}
+
+export interface TextLayout {
+  zones: TextZone[];
+}
 
 interface TextContent {
   [field: string]: Record<string, string>;
@@ -8,15 +34,15 @@ interface TextContent {
 
 interface CompositeOpts {
   background: Buffer;
-  designType: string;
+  layout: TextLayout;        // now passed in, not looked up by designType
   textContent: TextContent;
   languages: string[];       // ordered — first is primary
-  colorOverride?: string;    // optional hex to override all text color
+  colorOverride?: string;
 }
 
 interface ClearZonesOpts {
   background: Buffer;
-  designType: string;
+  layout: TextLayout;        // now passed in
   fields: string[];
   fill?: string;
   opacity?: number;
@@ -27,9 +53,8 @@ interface ClearZonesOpts {
  * Returns the final image buffer (PNG).
  */
 export async function compositeText(opts: CompositeOpts): Promise<Buffer> {
-  const { background, designType, textContent, languages, colorOverride } = opts;
-  const layout = getTextLayout(designType);
-  if (!layout) return background; // no layout defined — return background as-is
+  const { background, layout, textContent, languages, colorOverride } = opts;
+  if (!layout || !layout.zones.length) return background;
 
   // Get background dimensions
   const meta = await sharp(background).metadata();
@@ -63,9 +88,8 @@ export async function compositeText(opts: CompositeOpts): Promise<Buffer> {
 }
 
 export async function clearTextZones(opts: ClearZonesOpts): Promise<Buffer> {
-  const { background, designType, fields, fill = "#fbf7f0", opacity = 0.96 } = opts;
-  const layout = getTextLayout(designType);
-  if (!layout) return background;
+  const { background, layout, fields, fill = "#fbf7f0", opacity = 0.96 } = opts;
+  if (!layout || !layout.zones.length) return background;
 
   const meta = await sharp(background).metadata();
   const width = meta.width!;

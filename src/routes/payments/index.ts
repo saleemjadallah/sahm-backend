@@ -1,10 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { checkoutRoute } from "./checkout.js";
 
-export async function paymentRoutes(fastify: FastifyInstance) {
-  // POST /api/payments/checkout — Create Stripe Checkout session
-  await fastify.register(checkoutRoute);
+// Payments now only handles the Stripe webhook.
+// Credit purchases go through /api/credits/purchase.
+export async function paymentRoutes(_fastify: FastifyInstance) {
+  // No checkout routes needed — credit purchase is at /api/credits/purchase
 }
 
-// Webhook route is exported separately — registered under /api/webhooks in server.ts
 export { webhookRoute } from "./webhook.js";

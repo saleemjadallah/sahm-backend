@@ -43,64 +43,25 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
 }
 
 /**
- * Send an RSVP notification email to the project owner.
+ * Send a credit purchase confirmation email.
  */
-export async function sendRsvpNotification(
-  ownerEmail: string,
-  guestName: string,
-  rsvpStatus: string,
-  projectTitle: string,
-): Promise<void> {
-  const statusText =
-    rsvpStatus === "ATTENDING"
-      ? "will attend \u2705"
-      : rsvpStatus === "NOT_ATTENDING"
-        ? "cannot attend \u274c"
-        : "might attend \u2753";
-
-  await sendEmail({
-    to: ownerEmail,
-    subject: `RSVP Update: ${guestName} ${statusText} - ${projectTitle}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: #1a1a3e; text-align: center;">\u0633\u0647\u0645 Sahm</h1>
-        <h2 style="color: #333; text-align: center;">RSVP Update</h2>
-        <div style="background: #f9f9f9; border-radius: 12px; padding: 24px; margin: 20px 0;">
-          <p style="font-size: 16px; color: #333;"><strong>${guestName}</strong> ${statusText}</p>
-          <p style="font-size: 14px; color: #666;">Project: ${projectTitle}</p>
-        </div>
-        <div style="text-align: center; margin-top: 24px;">
-          <a href="${env.FRONTEND_URL}/projects" style="background: #d4a853; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px;">
-            View Dashboard
-          </a>
-        </div>
-      </div>
-    `,
-  });
-}
-
-/**
- * Send a milestone reminder email.
- */
-export async function sendMilestoneReminder(
+export async function sendCreditPurchaseConfirmation(
   email: string,
-  babyName: string,
-  milestoneLabel: string,
-  projectId: string,
+  credits: number,
 ): Promise<void> {
   await sendEmail({
     to: email,
-    subject: `${babyName} - ${milestoneLabel}! Your milestone card is ready \u2728`,
+    subject: `${credits} credits added to your Sahm account ✦`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="color: #1a1a3e; text-align: center;">\u0633\u0647\u0645 Sahm</h1>
-        <h2 style="color: #333; text-align: center;">${babyName} - ${milestoneLabel}!</h2>
+        <h1 style="color: #1a1a3e; text-align: center;">سهم Sahm</h1>
+        <h2 style="color: #333; text-align: center;">${credits} Credits Added!</h2>
         <p style="color: #666; text-align: center; font-size: 16px;">
-          Your milestone card is ready to share. \u2728
+          Your credits are ready to use. Start creating beautiful designs across all categories.
         </p>
         <div style="text-align: center; margin-top: 24px;">
-          <a href="${env.FRONTEND_URL}/projects/${projectId}" style="background: #d4a853; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px;">
-            View & Share
+          <a href="${env.FRONTEND_URL}/create" style="background: #d4a853; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px;">
+            Start Creating
           </a>
         </div>
       </div>

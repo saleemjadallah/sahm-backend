@@ -1,0 +1,395 @@
+import type { PrismaClient, Generation } from "@prisma/client";
+import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js";
+import { buildGenerationPrompt } from "../lib/ai/prompts.js";
+import { getCategory } from "../lib/categories/index.js";
+import { processGeneratedImage } from "./image.service.js";
+import { debitCredits, refundCredits } from "./credit.service.js";
+import { NotFoundError, GeminiError, ValidationError } from "../errors/index.js";
+import type { CategoryPromptConfig } from "../lib/categories/seed-data.js";
+import type { GenerateRequest, CreatePackRequest } from "../types/index.js";
+
+const GEMINI_TIMEOUT_MS = 180_000;
+const STORAGE_TIMEOUT_MS = 60_000;
+
+/**
+ * Generate a single image. The main entry point.
+ */
+export async function generateSingle(
+  prisma: PrismaClient,
+  userId: string,
+  req: GenerateRequest,
+): Promise<Generation> {
+  const { categoryId, subcategoryId, userPrompt, style, aspectRatio, metadata } = req;
+
+  // Load category config
+  const category = await getCategory(prisma, categoryId);
+  if (!category) throw new NotFoundError("Category");
+
+  const subcategory = subcategoryId
+    ? category.subcategories.find((s) => s.id === subcategoryId) ?? null
+    : null;
+
+  const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
+  const outputSpecs = category.outputSpecs as Record<string, unknown> | null;
+  const resolvedStyle = style || "modern";
+  const resolvedAspect =
+    aspectRatio || subcategory?.defaultAspect || (outputSpecs?.defaultAspectRatio as string) || "1:1";
+
+  // Determine credit cost
+  const creditsCost = resolvedAspect === "4k" ? 2 : 1;
+
+  // Debit credits (throws InsufficientCreditsError if not enough)
+  await debitCredits(prisma, userId, creditsCost, "GENERATION", undefined, `Generate ${categoryId}`);
+
+  // Create generation record
+  const generation = await prisma.generation.create({
+    data: {
+      userId,
+      categoryId,
+      subcategoryId: subcategory?.id,
+      userPrompt,
+      style: resolvedStyle,
+      aspectRatio: resolvedAspect,
+      metadata: metadata as object,
+      status: "GENERATING",
+      creditsCost,
+    },
+  });
+
+  // Build prompt
+  const prompt = buildGenerationPrompt(
+    promptConfig,
+    subcategory?.promptTemplate ?? null,
+    userPrompt ?? null,
+    resolvedStyle,
+    metadata ?? null,
+    resolvedAspect,
+  );
+
+  // Update record with resolved prompt
+  await prisma.generation.update({
+    where: { id: generation.id },
+    data: { resolvedPrompt: prompt.contentPrompt },
+  });
+
+  // Generate image async (don't await in the request cycle for real usage,
+  // but for now we do synchronous generation)
+  try {
+    const imageBuffer = await withTimeout(
+      generateDesignImage({
+        prompt: prompt.contentPrompt,
+        systemPrompt: prompt.systemPrompt,
+        aspectRatio: resolvedAspect,
+      }),
+      GEMINI_TIMEOUT_MS,
+      `Gemini generation timed out for ${generation.id}`,
+    );
+
+    const { previewUrl, fullUrl } = await withTimeout(
+      processGeneratedImage(imageBuffer, generation.id, `gen/${userId}`),
+      STORAGE_TIMEOUT_MS,
+      `Image upload timed out for ${generation.id}`,
+    );
+
+    return prisma.generation.update({
+      where: { id: generation.id },
+      data: { previewUrl, fullUrl, status: "COMPLETED" },
+    });
+  } catch (err) {
+    await prisma.generation.update({
+      where: { id: generation.id },
+      data: { status: "FAILED" },
+    });
+
+    // Refund credits on failure
+    await refundCredits(prisma, userId, creditsCost, generation.id).catch((refundErr) => {
+      console.error(`[generation] refund failed for ${generation.id}:`, refundErr);
+    });
+
+    throw new GeminiError("Failed to generate image", {
+      generationId: generation.id,
+      originalError: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Generate a coordinated pack of images.
+ * First image is the "hero" — used as style reference for the rest.
+ */
+export async function generatePack(
+  prisma: PrismaClient,
+  userId: string,
+  req: CreatePackRequest,
+): Promise<{ packId: string; generations: Generation[] }> {
+  const { categoryId, items, style, metadata } = req;
+
+  if (!items.length) throw new ValidationError("Pack must contain at least one item");
+
+  const category = await getCategory(prisma, categoryId);
+  if (!category) throw new NotFoundError("Category");
+
+  const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
+  const outputSpecs = category.outputSpecs as Record<string, unknown> | null;
+  const resolvedStyle = style || "modern";
+  const totalCost = items.length;
+
+  // Debit credits for the whole pack
+  await debitCredits(prisma, userId, totalCost, "PACK_GENERATION", undefined, `Pack: ${categoryId} x${items.length}`);
+
+  // Create pack
+  const pack = await prisma.pack.create({
+    data: {
+      userId,
+      categoryId,
+      label: `${category.label} Pack`,
+      style: resolvedStyle,
+      metadata: metadata as object,
+    },
+  });
+
+  // Create generation records
+  const generations: Generation[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const subcategory = item.subcategoryId
+      ? category.subcategories.find((s) => s.id === item.subcategoryId) ?? null
+      : null;
+    const aspect =
+      subcategory?.defaultAspect || (outputSpecs?.defaultAspectRatio as string) || "1:1";
+
+    const gen = await prisma.generation.create({
+      data: {
+        userId,
+        categoryId,
+        subcategoryId: subcategory?.id,
+        userPrompt: item.userPrompt,
+        style: resolvedStyle,
+        aspectRatio: aspect,
+        metadata: item.metadata as object,
+        status: "PENDING",
+        creditsCost: 1,
+        packId: pack.id,
+        packRole: i === 0 ? "hero" : `companion-${i}`,
+      },
+    });
+    generations.push(gen);
+  }
+
+  // Generate hero first
+  const heroGen = generations[0];
+  const heroSubcat = heroGen.subcategoryId
+    ? category.subcategories.find((s) => s.id === heroGen.subcategoryId) ?? null
+    : null;
+  const heroPrompt = buildGenerationPrompt(
+    promptConfig,
+    heroSubcat?.promptTemplate ?? null,
+    heroGen.userPrompt,
+    resolvedStyle,
+    (heroGen.metadata as Record<string, unknown>) ?? null,
+    heroGen.aspectRatio,
+  );
+
+  let heroBuffer: Buffer | undefined;
+  try {
+    await prisma.generation.update({ where: { id: heroGen.id }, data: { status: "GENERATING", resolvedPrompt: heroPrompt.contentPrompt } });
+
+    heroBuffer = await withTimeout(
+      generateDesignImage({
+        prompt: heroPrompt.contentPrompt,
+        systemPrompt: heroPrompt.systemPrompt,
+        aspectRatio: heroGen.aspectRatio,
+        imageSize: "4K",
+      }),
+      GEMINI_TIMEOUT_MS,
+      `Hero generation timed out`,
+    );
+
+    const { previewUrl, fullUrl } = await withTimeout(
+      processGeneratedImage(heroBuffer, heroGen.id, `gen/${userId}`),
+      STORAGE_TIMEOUT_MS,
+      `Hero upload timed out`,
+    );
+
+    generations[0] = await prisma.generation.update({
+      where: { id: heroGen.id },
+      data: { previewUrl, fullUrl, status: "COMPLETED" },
+    });
+  } catch (err) {
+    await prisma.generation.update({ where: { id: heroGen.id }, data: { status: "FAILED" } });
+    console.error(`[pack] hero generation failed:`, err);
+  }
+
+  // Generate rest in parallel with hero as style reference
+  const restResults = await Promise.allSettled(
+    generations.slice(1).map(async (gen, idx) => {
+      const subcat = gen.subcategoryId
+        ? category.subcategories.find((s) => s.id === gen.subcategoryId) ?? null
+        : null;
+      const prompt = buildGenerationPrompt(
+        promptConfig,
+        subcat?.promptTemplate ?? null,
+        gen.userPrompt,
+        resolvedStyle,
+        (gen.metadata as Record<string, unknown>) ?? null,
+        gen.aspectRatio,
+      );
+
+      const styleRef = heroBuffer
+        ? "\n\nSTYLE REFERENCE: Match the attached reference image's color palette, borders, motifs, and typography mood exactly. Only the layout and content should differ."
+        : "";
+
+      await prisma.generation.update({ where: { id: gen.id }, data: { status: "GENERATING", resolvedPrompt: prompt.contentPrompt } });
+
+      try {
+        const opts: GenerateImageOpts = {
+          prompt: prompt.contentPrompt + styleRef,
+          systemPrompt: prompt.systemPrompt,
+          aspectRatio: gen.aspectRatio,
+          referenceImage: heroBuffer,
+        };
+
+        const imageBuffer = await withTimeout(
+          generateDesignImage(opts),
+          GEMINI_TIMEOUT_MS,
+          `Pack item ${idx + 1} timed out`,
+        );
+
+        const { previewUrl, fullUrl } = await withTimeout(
+          processGeneratedImage(imageBuffer, gen.id, `gen/${userId}`),
+          STORAGE_TIMEOUT_MS,
+          `Pack item ${idx + 1} upload timed out`,
+        );
+
+        return prisma.generation.update({
+          where: { id: gen.id },
+          data: { previewUrl, fullUrl, status: "COMPLETED" },
+        });
+      } catch (err) {
+        await prisma.generation.update({ where: { id: gen.id }, data: { status: "FAILED" } });
+        throw err;
+      }
+    }),
+  );
+
+  // Collect final state
+  const finalGenerations = await prisma.generation.findMany({
+    where: { packId: pack.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Refund credits for failed items
+  const failedCount = finalGenerations.filter((g) => g.status === "FAILED").length;
+  if (failedCount > 0) {
+    await refundCredits(prisma, userId, failedCount, pack.id).catch((err) => {
+      console.error(`[pack] refund failed for pack ${pack.id}:`, err);
+    });
+  }
+
+  return { packId: pack.id, generations: finalGenerations };
+}
+
+/**
+ * Regenerate a single generation with optional new style/prompt.
+ */
+export async function regenerateGeneration(
+  prisma: PrismaClient,
+  userId: string,
+  generationId: string,
+  newStyle?: string,
+  newPrompt?: string,
+): Promise<Generation> {
+  const generation = await prisma.generation.findFirst({
+    where: { id: generationId, userId },
+  });
+  if (!generation) throw new NotFoundError("Generation");
+
+  const category = await getCategory(prisma, generation.categoryId);
+  if (!category) throw new NotFoundError("Category");
+
+  const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
+  const subcategory = generation.subcategoryId
+    ? category.subcategories.find((s) => s.id === generation.subcategoryId) ?? null
+    : null;
+
+  const resolvedStyle = newStyle || generation.style || "modern";
+  const creditsCost = 1;
+
+  // Debit credits
+  await debitCredits(prisma, userId, creditsCost, "GENERATION", generationId, `Regenerate ${generationId}`);
+
+  await prisma.generation.update({
+    where: { id: generationId },
+    data: { status: "GENERATING", style: resolvedStyle },
+  });
+
+  const prompt = buildGenerationPrompt(
+    promptConfig,
+    subcategory?.promptTemplate ?? null,
+    newPrompt ?? generation.userPrompt,
+    resolvedStyle,
+    (generation.metadata as Record<string, unknown>) ?? null,
+    generation.aspectRatio,
+  );
+
+  try {
+    const imageBuffer = await withTimeout(
+      generateDesignImage({
+        prompt: prompt.contentPrompt,
+        systemPrompt: prompt.systemPrompt,
+        aspectRatio: generation.aspectRatio,
+      }),
+      GEMINI_TIMEOUT_MS,
+      `Regeneration timed out for ${generationId}`,
+    );
+
+    const { previewUrl, fullUrl } = await withTimeout(
+      processGeneratedImage(imageBuffer, generationId, `gen/${userId}`),
+      STORAGE_TIMEOUT_MS,
+      `Upload timed out for ${generationId}`,
+    );
+
+    return prisma.generation.update({
+      where: { id: generationId },
+      data: {
+        previewUrl,
+        fullUrl,
+        status: "COMPLETED",
+        resolvedPrompt: prompt.contentPrompt,
+        style: resolvedStyle,
+        userPrompt: newPrompt ?? generation.userPrompt,
+      },
+    });
+  } catch (err) {
+    await prisma.generation.update({ where: { id: generationId }, data: { status: "FAILED" } });
+
+    await refundCredits(prisma, userId, creditsCost, generationId).catch((refundErr) => {
+      console.error(`[generation] refund failed for regen ${generationId}:`, refundErr);
+    });
+
+    throw new GeminiError("Failed to regenerate image", {
+      generationId,
+      originalError: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// ─── Utility ──────────────────────────────────────────
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}

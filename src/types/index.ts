@@ -1,12 +1,7 @@
 import type {
-  ProjectType,
-  ProjectStatus,
-  DesignType,
-  RsvpStatus,
-  MilestoneType,
-  PurchaseType,
-  SubPlan,
   GenerationStatus,
+  CreditTxnType,
+  SubPlan,
 } from "@prisma/client";
 
 // ─── Auth ──────────────────────────────────────────────
@@ -50,116 +45,107 @@ export interface AuthResponse {
   tokens: TokenPair;
 }
 
-// ─── Project ───────────────────────────────────────────
+// ─── Category ─────────────────────────────────────────
 
-export interface CreateProjectRequest {
-  type: ProjectType;
-  title?: string;
-  nameEn?: string;
-  nameAr?: string;
-  nameHi?: string;
-  date?: string;         // ISO date string
-  dateHijri?: string;
-  languages?: string[];  // ["en", "ar", "hi"]
-  metadata?: WeddingMetadata | BabyMetadata;
-  style?: string;
-}
-
-export interface WeddingMetadata {
-  groomNameAr?: string;
-  groomNameEn?: string;
-  groomNameHi?: string;
-  brideNameAr?: string;
-  brideNameEn?: string;
-  brideNameHi?: string;
-  groomFatherAr?: string;
-  groomFatherEn?: string;
-  groomFatherHi?: string;
-  brideFatherAr?: string;
-  brideFatherEn?: string;
-  brideFatherHi?: string;
-  groomFamilyAr?: string;
-  groomFamilyEn?: string;
-  groomFamilyHi?: string;
-  brideFamilyAr?: string;
-  brideFamilyEn?: string;
-  brideFamilyHi?: string;
-  venue?: string;
-  venueAr?: string;
-  venueHi?: string;
-  city?: string;
-  weddingTime?: string;
-  receptionTime?: string;
-  dressCode?: string;
-  rsvpDeadline?: string;
-  colorTheme?: string;
-  style?: string;
-  languages?: string[];
-}
-
-export interface BabyMetadata {
-  babyNameAr?: string;
-  babyNameEn?: string;
-  babyNameHi?: string;
-  gender?: "boy" | "girl";
-  weight?: string;
-  length?: string;
-  time?: string;
-  parentNamesAr?: string;
-  parentNamesEn?: string;
-  parentNamesHi?: string;
-  birthDateHijri?: string;
-  style?: string;
-  languages?: string[];
-}
-
-export interface ProjectResponse {
+export interface CategoryResponse {
   id: string;
-  type: ProjectType;
-  title: string | null;
-  status: ProjectStatus;
-  nameEn: string | null;
-  nameAr: string | null;
-  nameHi: string | null;
-  date: string | null;
-  dateHijri: string | null;
-  languages: string[];
-  rsvpSlug: string | null;
-  metadata: WeddingMetadata | BabyMetadata | null;
-  designs: DesignResponse[];
-  createdAt: string;
-  updatedAt: string;
+  label: string;
+  description: string | null;
+  iconUrl: string | null;
+  sortOrder: number;
+  outputSpecs: Record<string, unknown> | null;
+  styleOptions: string[] | null;
+  subcategories: SubcategoryResponse[];
 }
 
-// ─── Design ────────────────────────────────────────────
-
-export interface DesignResponse {
+export interface SubcategoryResponse {
   id: string;
-  projectId: string;
-  designType: DesignType;
+  label: string;
+  description: string | null;
+  defaultAspect: string;
+}
+
+// ─── Generation ───────────────────────────────────────
+
+export interface GenerateRequest {
+  categoryId: string;
+  subcategoryId?: string;
+  userPrompt?: string;
+  style?: string;
+  aspectRatio?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GenerationResponse {
+  id: string;
+  categoryId: string;
+  subcategoryId: string | null;
+  userPrompt: string | null;
   style: string | null;
-  previewUrl: string;
-  fullUrl: string | null;
   aspectRatio: string;
-  generationStatus: GenerationStatus;
-  textContent: Record<string, Record<string, string>> | null;
+  previewUrl: string | null;
+  fullUrl: string | null;
+  status: GenerationStatus;
+  creditsCost: number;
+  packId: string | null;
   isDownloaded: boolean;
   createdAt: string;
 }
 
-export interface GenerateSuiteRequest {
+export interface RegenerateRequest {
   style?: string;
+  userPrompt?: string;
 }
 
-export interface RegenerateDesignRequest {
+// ─── Pack ─────────────────────────────────────────────
+
+export interface CreatePackRequest {
+  categoryId: string;
+  items: {
+    subcategoryId?: string;
+    userPrompt?: string;
+    metadata?: Record<string, unknown>;
+  }[];
   style?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface EditDesignRequest {
-  textContent: Record<string, Record<string, string>>;
+export interface PackResponse {
+  id: string;
+  categoryId: string;
+  label: string;
+  style: string | null;
+  generations: GenerationResponse[];
+  createdAt: string;
 }
 
-// ─── Translation ───────────────────────────────────────
+// ─── Credits ──────────────────────────────────────────
+
+export interface CreditBalanceResponse {
+  balance: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+}
+
+export interface CreditTransactionResponse {
+  id: string;
+  type: CreditTxnType;
+  amount: number;
+  balance: number;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface CreditPurchaseRequest {
+  packSize: "PACK_10" | "PACK_50" | "PACK_100" | "PACK_500";
+}
+
+export interface CheckoutResponse {
+  sessionId: string;
+  url: string;
+}
+
+// ─── Translation ──────────────────────────────────────
 
 export interface TranslateRequest {
   text: string;
@@ -174,80 +160,7 @@ export interface TranslateUIRequest {
   targetLang: "ar" | "hi";
 }
 
-// ─── Payment ───────────────────────────────────────────
-
-export interface CheckoutRequest {
-  projectId: string;
-  purchaseType: "SINGLE_DESIGN" | "SUITE" | "SUITE_RSVP" | "BABY_SET" | "BABY_JOURNEY" | "CREDIT_PACK_10" | "CREDIT_PACK_30";
-  designId?: string;  // Required for SINGLE_DESIGN
-}
-
-export interface CheckoutResponse {
-  sessionId: string;
-  url: string;
-}
-
-// ─── RSVP ──────────────────────────────────────────────
-
-export interface RsvpPublicResponse {
-  projectTitle: string | null;
-  nameEn: string | null;
-  nameAr: string | null;
-  date: string | null;
-  dateHijri: string | null;
-  metadata: WeddingMetadata | null;
-  invitationDesign: DesignResponse | null;
-}
-
-export interface RsvpRespondRequest {
-  name: string;
-  nameAr?: string;
-  phone?: string;
-  email?: string;
-  rsvpStatus: "ATTENDING" | "NOT_ATTENDING" | "MAYBE";
-  plusOnes?: number;
-  dietaryNotes?: string;
-}
-
-// ─── Guest ─────────────────────────────────────────────
-
-export interface CreateGuestRequest {
-  name: string;
-  nameAr?: string;
-  phone?: string;
-  email?: string;
-  tableNumber?: string;
-}
-
-export interface UpdateGuestRequest {
-  name?: string;
-  nameAr?: string;
-  phone?: string;
-  email?: string;
-  tableNumber?: string;
-  rsvpStatus?: RsvpStatus;
-  plusOnes?: number;
-  dietaryNotes?: string;
-}
-
-export interface GuestImportResult {
-  imported: number;
-  skipped: number;
-  errors: string[];
-}
-
-export interface BroadcastRequest {
-  guestIds?: string[];  // If empty, broadcast to all pending
-  message?: string;
-}
-
-export interface BroadcastLink {
-  guestId: string;
-  guestName: string;
-  whatsappUrl: string;
-}
-
-// ─── Pagination ────────────────────────────────────────
+// ─── Pagination ───────────────────────────────────────
 
 export interface PaginationQuery {
   page?: number;
@@ -264,7 +177,7 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// ─── API Response ──────────────────────────────────────
+// ─── API Response ─────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

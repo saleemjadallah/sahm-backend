@@ -49,7 +49,7 @@ export async function autoTranslate(
 
   // Call Gemini for uncached translations
   const prompt = `
-You are a professional translator and transliterator specializing in wedding and celebration stationery for Gulf and South Asian cultures.
+You are a professional translator and transliterator specializing in multilingual design content for Gulf and South Asian cultures.
 
 TASK: ${fieldType === "name" ? "TRANSLITERATE" : "TRANSLATE"} the following from ${fromLang} to ${uncached.join(" and ")}.
 

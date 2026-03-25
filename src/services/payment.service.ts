@@ -1,9 +1,10 @@
 import Stripe from "stripe";
 import type { PrismaClient } from "@prisma/client";
 import { env } from "../config/env.js";
-import { PRICING } from "../config/constants.js";
-import { NotFoundError, PaymentError, ValidationError } from "../errors/index.js";
-import type { CheckoutRequest, CheckoutResponse } from "../types/index.js";
+import { CREDIT_PACKS, SUBSCRIPTION_CREDITS, type CreditPackKey } from "../config/constants.js";
+import { PaymentError, ValidationError } from "../errors/index.js";
+import { creditCredits } from "./credit.service.js";
+import type { CreditPurchaseRequest, CheckoutResponse } from "../types/index.js";
 
 let _stripe: Stripe | null = null;
 function getStripe(): Stripe {
@@ -14,80 +15,15 @@ function getStripe(): Stripe {
   return _stripe;
 }
 
-// ─── Pricing Map ───────────────────────────────────────
+// ─── Create Credit Purchase Checkout ─────────────────
 
-const PURCHASE_PRICING: Record<string, { amount: number; label: string; purchaseType: string }> = {
-  SINGLE_DESIGN: {
-    amount: PRICING.SINGLE_DESIGN,
-    label: "Single Design Download",
-    purchaseType: "SINGLE_DESIGN",
-  },
-  SUITE: {
-    amount: PRICING.WEDDING_SUITE,
-    label: "Wedding Stationery Suite",
-    purchaseType: "SUITE",
-  },
-  SUITE_RSVP: {
-    amount: PRICING.WEDDING_SUITE_RSVP,
-    label: "Wedding Suite + RSVP",
-    purchaseType: "SUITE",
-  },
-  BABY_SET: {
-    amount: PRICING.BABY_SET,
-    label: "Baby Announcement Set",
-    purchaseType: "SUITE",
-  },
-  BABY_JOURNEY: {
-    amount: PRICING.BABY_JOURNEY,
-    label: "Baby Full Journey",
-    purchaseType: "SUITE",
-  },
-  CREDIT_PACK_10: {
-    amount: PRICING.CREDIT_PACK_10,
-    label: "10 Download Credits",
-    purchaseType: "CREDIT_PACK",
-  },
-  CREDIT_PACK_30: {
-    amount: PRICING.CREDIT_PACK_30,
-    label: "30 Download Credits",
-    purchaseType: "CREDIT_PACK",
-  },
-};
-
-// ─── Create Checkout Session ───────────────────────────
-
-/**
- * Create a Stripe Checkout session for a purchase in AED.
- */
-export async function createCheckoutSession(
-  prisma: PrismaClient,
+export async function createCreditCheckout(
   userId: string,
-  body: CheckoutRequest,
+  body: CreditPurchaseRequest,
 ): Promise<CheckoutResponse> {
-  const { projectId, purchaseType, designId } = body;
-
-  // Validate project exists and belongs to user
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, userId },
-  });
-
-  if (!project) {
-    throw new NotFoundError("Project");
-  }
-
-  const pricing = PURCHASE_PRICING[purchaseType];
-  if (!pricing) {
-    throw new ValidationError(`Invalid purchase type: ${purchaseType}`);
-  }
-
-  // For single design, validate the design exists
-  if (purchaseType === "SINGLE_DESIGN" && designId) {
-    const design = await prisma.design.findFirst({
-      where: { id: designId, projectId },
-    });
-    if (!design) {
-      throw new NotFoundError("Design");
-    }
+  const pack = CREDIT_PACKS[body.packSize as CreditPackKey];
+  if (!pack) {
+    throw new ValidationError(`Invalid pack size: ${body.packSize}`);
   }
 
   try {
@@ -99,33 +35,29 @@ export async function createCheckoutSession(
           price_data: {
             currency: "aed",
             product_data: {
-              name: pricing.label,
-              description: `Sahm \u0633\u0647\u0645 - ${project.title || project.type}`,
+              name: `${pack.credits} Credits`,
+              description: `Sahm سهم — ${pack.credits} generation credits`,
             },
-            unit_amount: pricing.amount,
+            unit_amount: pack.priceAed,
           },
           quantity: 1,
         },
       ],
       metadata: {
         userId,
-        projectId,
-        purchaseType,
-        designId: designId || "",
-        internalPurchaseType: pricing.purchaseType,
+        purchaseType: "CREDIT_PACK",
+        packSize: body.packSize,
+        credits: String(pack.credits),
       },
-      success_url: `${env.FRONTEND_URL}/projects/${projectId}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${env.FRONTEND_URL}/projects/${projectId}`,
+      success_url: `${env.FRONTEND_URL}/credits?purchased=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.FRONTEND_URL}/credits`,
     });
 
     if (!session.url) {
       throw new PaymentError("Failed to create checkout session URL");
     }
 
-    return {
-      sessionId: session.id,
-      url: session.url,
-    };
+    return { sessionId: session.id, url: session.url };
   } catch (err) {
     if (err instanceof PaymentError) throw err;
     throw new PaymentError(
@@ -135,11 +67,8 @@ export async function createCheckoutSession(
   }
 }
 
-// ─── Handle Webhook ────────────────────────────────────
+// ─── Handle Webhook ──────────────────────────────────
 
-/**
- * Process Stripe webhook events.
- */
 export async function handleWebhook(
   prisma: PrismaClient,
   event: Stripe.Event,
@@ -148,6 +77,12 @@ export async function handleWebhook(
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       await handleCheckoutCompleted(prisma, session);
+      break;
+    }
+
+    case "invoice.paid": {
+      const invoice = event.data.object as Stripe.Invoice;
+      await handleInvoicePaid(prisma, invoice);
       break;
     }
 
@@ -164,14 +99,10 @@ export async function handleWebhook(
     }
 
     default:
-      // Unhandled event type — log but don't error
       break;
   }
 }
 
-/**
- * Construct and verify a Stripe webhook event from raw payload.
- */
 export function constructWebhookEvent(
   payload: string | Buffer,
   signature: string,
@@ -183,87 +114,51 @@ export function constructWebhookEvent(
   );
 }
 
-// ─── Webhook Handlers ──────────────────────────────────
+// ─── Webhook Handlers ────────────────────────────────
 
 async function handleCheckoutCompleted(
   prisma: PrismaClient,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
-  const { userId, projectId, purchaseType, designId, internalPurchaseType } =
-    session.metadata || {};
+  const { userId, purchaseType, credits } = session.metadata || {};
 
-  if (!userId || !projectId || !internalPurchaseType) {
-    return; // Missing metadata — can't process
-  }
+  if (!userId || purchaseType !== "CREDIT_PACK" || !credits) return;
 
-  const amountAed = session.amount_total || 0;
+  const creditAmount = parseInt(credits, 10);
+  if (isNaN(creditAmount) || creditAmount <= 0) return;
 
-  if (internalPurchaseType === "SINGLE_DESIGN" && designId) {
-    // Single design purchase — create one Download record
-    await prisma.download.create({
-      data: {
-        userId,
-        designId,
-        purchaseType: "SINGLE_DESIGN",
-        amountAed,
-        stripePaymentId: session.payment_intent as string,
-      },
-    });
+  await creditCredits(
+    prisma,
+    userId,
+    creditAmount,
+    "PURCHASE",
+    session.payment_intent as string,
+    `Purchased ${creditAmount} credits`,
+  );
+}
 
-    // Mark design as downloaded
-    await prisma.design.update({
-      where: { id: designId },
-      data: { isDownloaded: true },
-    });
-  } else if (internalPurchaseType === "SUITE") {
-    // Suite purchase — create Download records for all designs in the project
-    const designs = await prisma.design.findMany({
-      where: { projectId },
-      select: { id: true },
-    });
+async function handleInvoicePaid(
+  prisma: PrismaClient,
+  invoice: Stripe.Invoice,
+): Promise<void> {
+  const userId = invoice.subscription_details?.metadata?.userId;
+  if (!userId) return;
 
-    await prisma.download.createMany({
-      data: designs.map((d) => ({
-        userId,
-        designId: d.id,
-        purchaseType: "SUITE" as const,
-        amountAed: Math.round(amountAed / designs.length),
-        stripePaymentId: session.payment_intent as string,
-      })),
-    });
+  const subscription = await prisma.subscription.findUnique({ where: { userId } });
+  if (!subscription) return;
 
-    // Mark all designs as downloaded
-    await prisma.design.updateMany({
-      where: { projectId },
-      data: { isDownloaded: true },
-    });
+  const monthlyCredits =
+    SUBSCRIPTION_CREDITS[subscription.plan as keyof typeof SUBSCRIPTION_CREDITS] || 0;
 
-    // If SUITE_RSVP, generate RSVP slug
-    if (purchaseType === "SUITE_RSVP") {
-      const project = await prisma.project.findUnique({ where: { id: projectId } });
-      if (project && !project.rsvpSlug) {
-        const slug = generateRsvpSlug(project.nameEn || project.title || "event");
-        await prisma.project.update({
-          where: { id: projectId },
-          data: { rsvpSlug: slug },
-        });
-      }
-    }
-  } else if (internalPurchaseType === "CREDIT_PACK") {
-    // Credit pack — add credits to user subscription
-    const credits = purchaseType === "CREDIT_PACK_30" ? 30 : 10;
-
-    await prisma.subscription.upsert({
-      where: { userId },
-      update: {
-        creditsRemaining: { increment: credits },
-      },
-      create: {
-        userId,
-        plan: "FREE",
-        creditsRemaining: credits,
-      },
-    });
+  if (monthlyCredits > 0) {
+    await creditCredits(
+      prisma,
+      userId,
+      monthlyCredits,
+      "SUBSCRIPTION",
+      undefined,
+      `Monthly ${subscription.plan} credits`,
+    );
   }
 }
 
@@ -274,19 +169,26 @@ async function handleSubscriptionUpdated(
   const userId = subscription.metadata?.userId;
   if (!userId) return;
 
+  const plan = (subscription.metadata?.plan as string) || "STARTER";
+  const monthlyCredits =
+    SUBSCRIPTION_CREDITS[plan as keyof typeof SUBSCRIPTION_CREDITS] || 0;
+
   await prisma.subscription.upsert({
     where: { userId },
     update: {
       stripeSubId: subscription.id,
       status: subscription.status,
+      plan: plan as "FREE" | "STARTER" | "PRO" | "UNLIMITED",
+      monthlyCredits,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
     create: {
       userId,
-      plan: "STARTER",
+      plan: plan as "FREE" | "STARTER" | "PRO" | "UNLIMITED",
       stripeCustomerId: subscription.customer as string,
       stripeSubId: subscription.id,
       status: subscription.status,
+      monthlyCredits,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
   });
@@ -301,30 +203,6 @@ async function handleSubscriptionDeleted(
 
   await prisma.subscription.updateMany({
     where: { stripeSubId: subscription.id },
-    data: {
-      status: "canceled",
-      plan: "FREE",
-    },
+    data: { status: "canceled", plan: "FREE", monthlyCredits: 0 },
   });
-}
-
-// ─── Helpers ───────────────────────────────────────────
-
-function generateRsvpSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 50)
-    + "-" + nanoidShort();
-}
-
-function nanoidShort(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
 }
