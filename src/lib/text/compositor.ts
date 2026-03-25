@@ -14,6 +14,14 @@ interface CompositeOpts {
   colorOverride?: string;    // optional hex to override all text color
 }
 
+interface ClearZonesOpts {
+  background: Buffer;
+  designType: string;
+  fields: string[];
+  fill?: string;
+  opacity?: number;
+}
+
 /**
  * Composite programmatic text onto an AI-generated background image.
  * Returns the final image buffer (PNG).
@@ -48,6 +56,40 @@ export async function compositeText(opts: CompositeOpts): Promise<Buffer> {
 </svg>`;
 
   // Composite SVG text layer onto background
+  return sharp(background)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .png()
+    .toBuffer();
+}
+
+export async function clearTextZones(opts: ClearZonesOpts): Promise<Buffer> {
+  const { background, designType, fields, fill = "#fbf7f0", opacity = 0.96 } = opts;
+  const layout = getTextLayout(designType);
+  if (!layout) return background;
+
+  const meta = await sharp(background).metadata();
+  const width = meta.width!;
+  const height = meta.height!;
+
+  const rects = layout.zones
+    .filter((zone) => zone.box && fields.includes(zone.field))
+    .map((zone) => {
+      const box = zone.box!;
+      const x = Math.round(width * box.xPct / 100);
+      const y = Math.round(height * box.yPct / 100);
+      const w = Math.round(width * box.widthPct / 100);
+      const h = Math.round(height * box.heightPct / 100);
+      const rx = Math.max(8, Math.round(Math.min(w, h) * 0.16));
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${rx}" fill="${fill}" fill-opacity="${opacity}" />`;
+    })
+    .join("\n  ");
+
+  if (!rects) return background;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  ${rects}
+</svg>`;
+
   return sharp(background)
     .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
     .png()

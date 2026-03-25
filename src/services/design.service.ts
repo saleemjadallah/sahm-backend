@@ -3,7 +3,7 @@ import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js
 import { buildDesignPrompt, type DesignPrompt } from "../lib/ai/prompts.js";
 import { LAYOUT_GUIDES } from "../lib/ai/layout-guides.js";
 import { processGeneratedImage } from "./image.service.js";
-import { compositeText } from "../lib/text/compositor.js";
+import { clearTextZones, compositeText } from "../lib/text/compositor.js";
 import { NotFoundError, GeminiError } from "../errors/index.js";
 import { resolveSuitePack } from "../lib/ai/suite-packs.js";
 
@@ -285,6 +285,11 @@ async function applyTextLayers(
 
   const hybridOverlay = getHybridOverlay(textOpts.designType, textOpts.textContent);
   if (hybridOverlay) {
+    layered = await clearTextZones({
+      background: layered,
+      designType: hybridOverlay.designType,
+      fields: ["babyName"],
+    });
     layered = await compositeText({
       background: layered,
       designType: hybridOverlay.designType,
