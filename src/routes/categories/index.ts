@@ -1,7 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { getAllCategories, getCategory } from "../../lib/categories/index.js";
 import { NotFoundError } from "../../errors/index.js";
-import type { CategoryResponse, SubcategoryResponse } from "../../types/index.js";
+import type {
+  CategoryResponse,
+  CategoryOutputSpecsResponse,
+  SubcategoryResponse,
+} from "../../types/index.js";
 
 export async function categoryRoutes(fastify: FastifyInstance) {
   // GET /api/categories — list all active categories (public)
@@ -14,7 +18,7 @@ export async function categoryRoutes(fastify: FastifyInstance) {
       description: c.description,
       iconUrl: c.iconUrl,
       sortOrder: c.sortOrder,
-      outputSpecs: c.outputSpecs as Record<string, unknown> | null,
+      outputSpecs: c.outputSpecs as CategoryOutputSpecsResponse | null,
       styleOptions: c.styleOptions as string[] | null,
       subcategories: c.subcategories.map(
         (s): SubcategoryResponse => ({
@@ -40,7 +44,7 @@ export async function categoryRoutes(fastify: FastifyInstance) {
       description: category.description,
       iconUrl: category.iconUrl,
       sortOrder: category.sortOrder,
-      outputSpecs: category.outputSpecs as Record<string, unknown> | null,
+      outputSpecs: category.outputSpecs as CategoryOutputSpecsResponse | null,
       styleOptions: category.styleOptions as string[] | null,
       subcategories: category.subcategories.map(
         (s): SubcategoryResponse => ({

@@ -16,6 +16,10 @@ export interface PromptOptions {
   categoryId?: string;
   subcategoryId?: string;
   promptVariant?: string;
+  outputFormatLabel?: string;
+  outputFormatDescription?: string;
+  outputFormatPromptHint?: string;
+  outputResolution?: string;
 }
 
 /**
@@ -103,7 +107,23 @@ export function buildGenerationPrompt(
   // 5. Aspect ratio
   parts.push(`Output aspect ratio: ${aspectRatio}`);
 
-  // 6. Output guidance
+  // 6. Output format intent
+  if (options?.outputFormatLabel) {
+    const formatSummary = options.outputFormatDescription
+      ? `${options.outputFormatLabel} — ${options.outputFormatDescription}`
+      : options.outputFormatLabel;
+    parts.push(`Intended output format: ${formatSummary}`);
+  }
+
+  if (options?.outputResolution) {
+    parts.push(`Target resolution: ${options.outputResolution}`);
+  }
+
+  if (options?.outputFormatPromptHint) {
+    parts.push(`Format guidance: ${options.outputFormatPromptHint}`);
+  }
+
+  // 7. Output guidance
   if (activeOutputGuidance) {
     const filledGuidance = metadata
       ? fillTemplate(activeOutputGuidance, metadata)
@@ -111,7 +131,7 @@ export function buildGenerationPrompt(
     parts.push(filledGuidance);
   }
 
-  // 7. Quality guidance (positive framing)
+  // 8. Quality guidance (positive framing)
   if (activeNegativeGuidance) {
     parts.push(`Quality guidance: ${activeNegativeGuidance}`);
   }

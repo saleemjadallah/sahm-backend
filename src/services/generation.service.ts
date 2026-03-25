@@ -5,7 +5,11 @@ import { getCategory } from "../lib/categories/index.js";
 import { processGeneratedImage } from "./image.service.js";
 import { debitCredits, refundCredits } from "./credit.service.js";
 import { NotFoundError, GeminiError, ValidationError } from "../errors/index.js";
-import type { CategoryPromptConfig } from "../lib/categories/seed-data.js";
+import type {
+  CategoryPromptConfig,
+  CategoryOutputSpecs,
+  CategoryOutputFormat,
+} from "../lib/categories/seed-data.js";
 import type { GenerateRequest, CreatePackRequest } from "../types/index.js";
 
 const GEMINI_TIMEOUT_MS = 180_000;
@@ -19,7 +23,16 @@ export async function generateSingle(
   userId: string,
   req: GenerateRequest,
 ): Promise<Generation> {
-  const { categoryId, subcategoryId, userPrompt, style, aspectRatio, metadata, promptVariant } = req;
+  const {
+    categoryId,
+    subcategoryId,
+    userPrompt,
+    style,
+    aspectRatio,
+    outputFormatId,
+    metadata,
+    promptVariant,
+  } = req;
 
   // Load category config
   const category = await getCategory(prisma, categoryId);
@@ -30,13 +43,22 @@ export async function generateSingle(
     : null;
 
   const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
-  const outputSpecs = category.outputSpecs as Record<string, unknown> | null;
+  const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const resolvedStyle = style || "modern";
+  const selectedOutputFormat = resolveOutputFormat(outputSpecs, outputFormatId, aspectRatio);
   const resolvedAspect =
-    aspectRatio || subcategory?.defaultAspect || (outputSpecs?.defaultAspectRatio as string) || "1:1";
+    aspectRatio
+    || selectedOutputFormat?.aspectRatio
+    || subcategory?.defaultAspect
+    || outputSpecs?.defaultAspectRatio
+    || "1:1";
+  const resolvedResolution =
+    selectedOutputFormat?.resolution || outputSpecs?.defaultResolution || "2k";
 
   // Determine credit cost
-  const creditsCost = resolvedAspect === "4k" ? 2 : 1;
+  const creditsCost =
+    selectedOutputFormat?.creditsCost
+    ?? (resolvedResolution.toLowerCase() === "4k" ? 2 : 1);
 
   // Debit credits (throws InsufficientCreditsError if not enough)
   await debitCredits(prisma, userId, creditsCost, "GENERATION", undefined, `Generate ${categoryId}`);
@@ -64,7 +86,15 @@ export async function generateSingle(
     resolvedStyle,
     metadata ?? null,
     resolvedAspect,
-    { categoryId, subcategoryId: subcategory?.id, promptVariant },
+    {
+      categoryId,
+      subcategoryId: subcategory?.id,
+      promptVariant,
+      outputFormatLabel: selectedOutputFormat?.label,
+      outputFormatDescription: selectedOutputFormat?.description,
+      outputFormatPromptHint: selectedOutputFormat?.promptHint,
+      outputResolution: resolvedResolution,
+    },
   );
 
   // Update record with resolved prompt (include variant ID for tracking)
@@ -135,7 +165,7 @@ export async function generatePack(
   if (!category) throw new NotFoundError("Category");
 
   const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
-  const outputSpecs = category.outputSpecs as Record<string, unknown> | null;
+  const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const resolvedStyle = style || "modern";
   const totalCost = items.length;
 
@@ -161,7 +191,7 @@ export async function generatePack(
       ? category.subcategories.find((s) => s.id === item.subcategoryId) ?? null
       : null;
     const aspect =
-      subcategory?.defaultAspect || (outputSpecs?.defaultAspectRatio as string) || "1:1";
+      subcategory?.defaultAspect || outputSpecs?.defaultAspectRatio || "1:1";
 
     const gen = await prisma.generation.create({
       data: {
@@ -193,7 +223,11 @@ export async function generatePack(
     resolvedStyle,
     (heroGen.metadata as Record<string, unknown>) ?? null,
     heroGen.aspectRatio,
-    { categoryId: category.id, subcategoryId: heroSubcat?.id },
+    {
+      categoryId: category.id,
+      subcategoryId: heroSubcat?.id,
+      outputResolution: outputSpecs?.defaultResolution,
+    },
   );
 
   let heroBuffer: Buffer | undefined;
@@ -239,7 +273,11 @@ export async function generatePack(
         resolvedStyle,
         (gen.metadata as Record<string, unknown>) ?? null,
         gen.aspectRatio,
-        { categoryId: category.id, subcategoryId: subcat?.id },
+        {
+          categoryId: category.id,
+          subcategoryId: subcat?.id,
+          outputResolution: outputSpecs?.defaultResolution,
+        },
       );
 
       const styleRef = heroBuffer
@@ -315,6 +353,7 @@ export async function regenerateGeneration(
   if (!category) throw new NotFoundError("Category");
 
   const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
+  const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const subcategory = generation.subcategoryId
     ? category.subcategories.find((s) => s.id === generation.subcategoryId) ?? null
     : null;
@@ -337,7 +376,11 @@ export async function regenerateGeneration(
     resolvedStyle,
     (generation.metadata as Record<string, unknown>) ?? null,
     generation.aspectRatio,
-    { categoryId: generation.categoryId, subcategoryId: subcategory?.id },
+    {
+      categoryId: generation.categoryId,
+      subcategoryId: subcategory?.id,
+      outputResolution: outputSpecs?.defaultResolution,
+    },
   );
 
   try {
@@ -380,6 +423,32 @@ export async function regenerateGeneration(
       originalError: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+function resolveOutputFormat(
+  outputSpecs: CategoryOutputSpecs | null,
+  requestedFormatId?: string,
+  requestedAspectRatio?: string,
+): CategoryOutputFormat | null {
+  if (!outputSpecs?.formats?.length) return null;
+
+  if (requestedFormatId) {
+    const byId = outputSpecs.formats.find((format) => format.id === requestedFormatId);
+    if (byId) return byId;
+  }
+
+  if (requestedAspectRatio) {
+    const byAspect = outputSpecs.formats.find(
+      (format) => format.aspectRatio === requestedAspectRatio,
+    );
+    if (byAspect) return byAspect;
+  }
+
+  return (
+    outputSpecs.formats.find((format) => format.id === outputSpecs.defaultFormatId)
+    || outputSpecs.formats[0]
+    || null
+  );
 }
 
 // ─── Utility ──────────────────────────────────────────

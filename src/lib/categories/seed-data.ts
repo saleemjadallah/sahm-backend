@@ -24,6 +24,18 @@ export interface CategoryOutputSpecs {
   availableAspectRatios: string[];
   defaultResolution: string;
   supportsTextOverlay: boolean;
+  defaultFormatId: string;
+  formats: CategoryOutputFormat[];
+}
+
+export interface CategoryOutputFormat {
+  id: string;
+  label: string;
+  description: string;
+  aspectRatio: string;
+  resolution: string;
+  creditsCost: number;
+  promptHint: string;
 }
 
 export interface SubcategorySeed {
@@ -111,6 +123,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["4:5", "1:1", "A5", "A4", "16:9"],
       defaultResolution: "4k",
       supportsTextOverlay: true,
+      defaultFormatId: "invitation-portrait",
+      formats: [
+        {
+          id: "invitation-portrait",
+          label: "Invitation Portrait",
+          description: "Tall front-cover format for invitations and announcements.",
+          aspectRatio: "4:5",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Compose as a polished portrait invitation front with strong hierarchy, decorative framing, and spacious text zones.",
+        },
+        {
+          id: "square-keepsake",
+          label: "Square Keepsake",
+          description: "Compact square format for RSVP, thank-you, or social sharing.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Treat this as a compact square card with a centered focal area and minimal edge crowding.",
+        },
+        {
+          id: "full-print-sheet",
+          label: "Full Print Sheet",
+          description: "Full-page print layout for menus, inserts, and signage.",
+          aspectRatio: "A4",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Lay out the design like a premium full-page print piece that can hold structured content comfortably.",
+        },
+      ],
     },
     styleOptions: ALL_STYLES,
     subcategories: [
@@ -242,6 +287,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["3:4", "4:3", "1:1", "2:3", "16:9"],
       defaultResolution: "4k",
       supportsTextOverlay: true,
+      defaultFormatId: "framed-portrait",
+      formats: [
+        {
+          id: "framed-portrait",
+          label: "Framed Portrait Print",
+          description: "Vertical wall print suited for framed display.",
+          aspectRatio: "3:4",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Design as a gallery-ready framed print with a strong focal center and elegant breathing room.",
+        },
+        {
+          id: "square-statement",
+          label: "Square Statement Piece",
+          description: "Balanced square art for quotes, names, and bold motifs.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Create a square statement artwork that reads clearly from a distance and rewards close viewing.",
+        },
+        {
+          id: "panoramic-canvas",
+          label: "Panoramic Canvas",
+          description: "Wide-format canvas for above-sofa or hallway placement.",
+          aspectRatio: "16:9",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Compose for a wide panoramic canvas with horizontal flow, visual rhythm, and wall-scale impact.",
+        },
+      ],
     },
     styleOptions: [
       "royal",
@@ -355,6 +433,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["4:5", "1:1", "3:4"],
       defaultResolution: "2k",
       supportsTextOverlay: true,
+      defaultFormatId: "card-cover",
+      formats: [
+        {
+          id: "card-cover",
+          label: "Card Cover",
+          description: "Classic greeting-card front with a single emotional focal point.",
+          aspectRatio: "4:5",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Design a front-cover card with a clear focal illustration and comfortable room for a short message.",
+        },
+        {
+          id: "square-gift-card",
+          label: "Square Gift Card",
+          description: "Shareable square format for digital gifting and keepsakes.",
+          aspectRatio: "1:1",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Use a balanced square composition that feels intimate, celebratory, and easy to share digitally.",
+        },
+        {
+          id: "portrait-keepsake",
+          label: "Portrait Keepsake",
+          description: "Tall keepsake format for devotional or sentimental cards.",
+          aspectRatio: "3:4",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose as a portrait keepsake card with graceful vertical flow and a calm, heartfelt center.",
+        },
+      ],
     },
     styleOptions: ALL_STYLES,
     subcategories: [
@@ -475,6 +586,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["1:1", "9:16", "4:5", "16:9"],
       defaultResolution: "2k",
       supportsTextOverlay: false,
+      defaultFormatId: "square-post",
+      formats: [
+        {
+          id: "square-post",
+          label: "Feed Post",
+          description: "Square format for Instagram, Facebook, and general feed posts.",
+          aspectRatio: "1:1",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Frame the design for mobile feed viewing with an immediate focal point and strong thumbnail readability.",
+        },
+        {
+          id: "story-vertical",
+          label: "Story Vertical",
+          description: "Full-height vertical canvas for stories and reel covers.",
+          aspectRatio: "9:16",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose vertically with safe zones near the top and bottom for app UI overlays and headlines.",
+        },
+        {
+          id: "widescreen-banner",
+          label: "Widescreen Banner",
+          description: "Wide promotional format for YouTube, LinkedIn, and hero banners.",
+          aspectRatio: "16:9",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Build a wide banner composition with one dominant focal area and clean lateral space for branding.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "floral", "gold_foil", "tropical_floral", "watercolor"],
     subcategories: [
@@ -588,6 +732,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["1:1", "4:5", "3:4", "16:9"],
       defaultResolution: "2k",
       supportsTextOverlay: false,
+      defaultFormatId: "social-dish",
+      formats: [
+        {
+          id: "social-dish",
+          label: "Social Dish Hero",
+          description: "Square hero shot for menu highlights and social posts.",
+          aspectRatio: "1:1",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Style the output as a hero food image optimized for social feeds with strong appetite appeal.",
+        },
+        {
+          id: "menu-feature",
+          label: "Menu Feature",
+          description: "Tall feature format for specials, promos, and menu storytelling.",
+          aspectRatio: "4:5",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose vertically so one dish or drink dominates the frame with room for menu-style framing.",
+        },
+        {
+          id: "restaurant-hero",
+          label: "Restaurant Hero",
+          description: "Wide website or delivery-app hero image.",
+          aspectRatio: "16:9",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Create a widescreen restaurant hero visual with cinematic plating and inviting environmental cues.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "watercolor", "gold_foil", "tropical_floral"],
     subcategories: [
@@ -690,8 +867,41 @@ export const CATEGORIES: CategorySeed[] = [
     outputSpecs: {
       defaultAspectRatio: "1:1",
       availableAspectRatios: ["1:1", "16:9", "A4", "3:2"],
-      defaultResolution: "2k",
+      defaultResolution: "4k",
       supportsTextOverlay: false,
+      defaultFormatId: "brand-square",
+      formats: [
+        {
+          id: "brand-square",
+          label: "Brand Tile",
+          description: "Square corporate visual for business cards and promo tiles.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Compose like a premium brand tile with crisp structure, restrained hierarchy, and executive polish.",
+        },
+        {
+          id: "presentation-cover",
+          label: "Presentation Cover",
+          description: "Widescreen cover for decks, webinars, and keynote materials.",
+          aspectRatio: "16:9",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Design as a professional presentation cover with a strong hero concept and clean whitespace.",
+        },
+        {
+          id: "formal-print",
+          label: "Formal Print",
+          description: "Document-style print format for letterheads and corporate collateral.",
+          aspectRatio: "A4",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Treat this as formal print collateral with precise alignment, restrained branding, and print-safe spacing.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "royal", "gold_foil"],
     subcategories: [
@@ -821,6 +1031,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["16:9", "4:3", "3:2", "1:1"],
       defaultResolution: "4k",
       supportsTextOverlay: false,
+      defaultFormatId: "listing-hero",
+      formats: [
+        {
+          id: "listing-hero",
+          label: "Listing Hero",
+          description: "Wide primary property image for listings and landing pages.",
+          aspectRatio: "16:9",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Compose as a premium real-estate hero image that sells the space immediately at first glance.",
+        },
+        {
+          id: "brochure-spread",
+          label: "Brochure Spread",
+          description: "Balanced interior spread for brochures and property decks.",
+          aspectRatio: "4:3",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Frame the space for brochure use with balanced room geometry, clear sight lines, and polished staging.",
+        },
+        {
+          id: "square-highlight",
+          label: "Square Highlight",
+          description: "Square crop for feature callouts and carousel posts.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Use a square composition that isolates one standout room, amenity, or architectural moment.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "royal", "gold_foil"],
     subcategories: [
@@ -923,6 +1166,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["4:5", "3:4", "1:1", "9:16"],
       defaultResolution: "2k",
       supportsTextOverlay: false,
+      defaultFormatId: "editorial-portrait",
+      formats: [
+        {
+          id: "editorial-portrait",
+          label: "Editorial Portrait",
+          description: "Tall magazine-style fashion composition.",
+          aspectRatio: "4:5",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Style the output like a fashion editorial portrait with clear attitude, styling, and mood.",
+        },
+        {
+          id: "lookbook-page",
+          label: "Lookbook Page",
+          description: "Vertical page format for collections and outfit storytelling.",
+          aspectRatio: "3:4",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose as a curated lookbook page with full outfit readability and deliberate styling details.",
+        },
+        {
+          id: "campaign-story",
+          label: "Campaign Story",
+          description: "Vertical story format for launches and mobile campaigns.",
+          aspectRatio: "9:16",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Build a mobile-first campaign image with dramatic vertical flow and clean safe zones.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "gold_foil", "watercolor", "floral"],
     subcategories: [
@@ -1030,8 +1306,41 @@ export const CATEGORIES: CategorySeed[] = [
     outputSpecs: {
       defaultAspectRatio: "1:1",
       availableAspectRatios: ["1:1", "3:4", "4:5"],
-      defaultResolution: "2k",
+      defaultResolution: "4k",
       supportsTextOverlay: false,
+      defaultFormatId: "avatar-square",
+      formats: [
+        {
+          id: "avatar-square",
+          label: "Avatar Square",
+          description: "Clean square portrait for profile images and avatars.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Compose a centered portrait crop that works as a premium avatar with crisp facial detail.",
+        },
+        {
+          id: "portrait-frame",
+          label: "Portrait Frame",
+          description: "Classic vertical portrait for prints and profile features.",
+          aspectRatio: "3:4",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Frame the subject as a commissioned portrait with elegant head-to-torso balance and expressive detail.",
+        },
+        {
+          id: "social-headshot",
+          label: "Social Headshot",
+          description: "Tall headshot format for LinkedIn, bios, and creator profiles.",
+          aspectRatio: "4:5",
+          resolution: "4k",
+          creditsCost: 2,
+          promptHint:
+            "Design for a polished social headshot crop with flattering posture, eye contact, and strong presence.",
+        },
+      ],
     },
     styleOptions: ["modern", "watercolor", "minimal", "gold_foil", "celestial"],
     subcategories: [
@@ -1128,6 +1437,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["3:4", "1:1", "4:5", "16:9"],
       defaultResolution: "4k",
       supportsTextOverlay: true,
+      defaultFormatId: "devotional-print",
+      formats: [
+        {
+          id: "devotional-print",
+          label: "Devotional Print",
+          description: "Vertical sacred-art format for prayer corners and wall display.",
+          aspectRatio: "3:4",
+          resolution: "4k",
+          creditsCost: 1,
+          promptHint:
+            "Compose as reverent devotional artwork suitable for printing and respectful display in the home.",
+        },
+        {
+          id: "altar-square",
+          label: "Square Sacred Panel",
+          description: "Balanced square format for blessings, names, and symbolic motifs.",
+          aspectRatio: "1:1",
+          resolution: "4k",
+          creditsCost: 1,
+          promptHint:
+            "Use a centered, symmetrical square composition with calm spacing and respectful ornamentation.",
+        },
+        {
+          id: "ceremonial-banner",
+          label: "Ceremonial Banner",
+          description: "Wide sacred-art format for event backdrops and digital displays.",
+          aspectRatio: "16:9",
+          resolution: "4k",
+          creditsCost: 1,
+          promptHint:
+            "Create a wide ceremonial composition with strong spiritual atmosphere and clean horizontal balance.",
+        },
+      ],
     },
     styleOptions: [
       "islamic",
@@ -1255,6 +1597,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["A4", "1:1", "16:9", "4:5"],
       defaultResolution: "2k",
       supportsTextOverlay: true,
+      defaultFormatId: "print-handout",
+      formats: [
+        {
+          id: "print-handout",
+          label: "Print Handout",
+          description: "Full-page educational print for certificates, worksheets, and posters.",
+          aspectRatio: "A4",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Lay out the output like an educational print asset with readable hierarchy and classroom-ready clarity.",
+        },
+        {
+          id: "classroom-card",
+          label: "Classroom Card",
+          description: "Tall classroom visual for flashcards and achievement cards.",
+          aspectRatio: "4:5",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose a portrait educational card with simple structure, legible zones, and age-appropriate energy.",
+        },
+        {
+          id: "slideshow-cover",
+          label: "Slideshow Cover",
+          description: "Widescreen lesson or presentation cover image.",
+          aspectRatio: "16:9",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Design as a clean educational slide cover with a strong headline area and presentation-friendly composition.",
+        },
+      ],
     },
     styleOptions: ["modern", "minimal", "floral", "watercolor", "celestial", "tropical_floral"],
     subcategories: [
@@ -1361,6 +1736,39 @@ export const CATEGORIES: CategorySeed[] = [
       availableAspectRatios: ["16:9", "3:4", "1:1", "4:5"],
       defaultResolution: "2k",
       supportsTextOverlay: false,
+      defaultFormatId: "destination-hero",
+      formats: [
+        {
+          id: "destination-hero",
+          label: "Destination Hero",
+          description: "Wide aspirational travel hero for websites and campaigns.",
+          aspectRatio: "16:9",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Compose as a sweeping travel hero image that immediately communicates place, mood, and escape.",
+        },
+        {
+          id: "poster-portrait",
+          label: "Travel Poster",
+          description: "Vertical poster-style composition for destination storytelling.",
+          aspectRatio: "3:4",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Style the output like a premium travel poster with iconic landmarks, atmosphere, and poster-worthy balance.",
+        },
+        {
+          id: "social-postcard",
+          label: "Social Postcard",
+          description: "Square postcard format for highlights and destination recaps.",
+          aspectRatio: "1:1",
+          resolution: "2k",
+          creditsCost: 1,
+          promptHint:
+            "Create a square postcard-style travel visual with one memorable scene and strong shareability.",
+        },
+      ],
     },
     styleOptions: [
       "modern",

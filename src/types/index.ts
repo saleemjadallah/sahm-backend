@@ -53,7 +53,7 @@ export interface CategoryResponse {
   description: string | null;
   iconUrl: string | null;
   sortOrder: number;
-  outputSpecs: Record<string, unknown> | null;
+  outputSpecs: CategoryOutputSpecsResponse | null;
   styleOptions: string[] | null;
   subcategories: SubcategoryResponse[];
 }
@@ -65,6 +65,25 @@ export interface SubcategoryResponse {
   defaultAspect: string;
 }
 
+export interface CategoryOutputFormatResponse {
+  id: string;
+  label: string;
+  description: string;
+  aspectRatio: string;
+  resolution: string;
+  creditsCost: number;
+  promptHint: string;
+}
+
+export interface CategoryOutputSpecsResponse {
+  defaultAspectRatio: string;
+  availableAspectRatios: string[];
+  defaultResolution: string;
+  supportsTextOverlay: boolean;
+  defaultFormatId: string;
+  formats: CategoryOutputFormatResponse[];
+}
+
 // ─── Generation ───────────────────────────────────────
 
 export interface GenerateRequest {
@@ -73,6 +92,7 @@ export interface GenerateRequest {
   userPrompt?: string;
   style?: string;
   aspectRatio?: string;
+  outputFormatId?: string;
   metadata?: Record<string, unknown>;
   promptVariant?: string;
 }
