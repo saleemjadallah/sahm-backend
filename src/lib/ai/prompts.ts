@@ -203,7 +203,7 @@ export function buildGenerationPrompt(
       "Render a full-bleed food photograph, not a designed poster, card, collage, or framed layout. No decorative borders, celestial motifs, florals, gold-foil treatments, inset windows, paper textures, graphic overlays, or visible text unless the user explicitly asks for them. The plated dish should dominate the frame and read immediately as freshly served, edible, and craveable.",
     );
     parts.push(
-      "Push appetite and taste cues: visible heat or steam when appropriate, glossy sauces, crisp edges, moist interiors, fresh garnish, believable texture, and lighting that suggests aroma, warmth, and just-cooked freshness.",
+      "Push appetite and taste cues through glossy sauces, crisp edges, moist interiors, fresh garnish, believable texture, and lighting that suggests aroma, warmth, and just-cooked freshness. Avoid obvious white steam, smoke, mist, or vapor effects unless the user explicitly asks for them.",
     );
   }
 

@@ -585,7 +585,7 @@ export const CATEGORIES: CategorySeed[] = [
       defaultAspectRatio: "1:1",
       availableAspectRatios: ["1:1", "9:16", "4:5", "16:9"],
       defaultResolution: "2k",
-      supportsTextOverlay: false,
+      supportsTextOverlay: true,
       defaultFormatId: "square-post",
       formats: [
         {
@@ -687,7 +687,7 @@ export const CATEGORIES: CategorySeed[] = [
       outputGuidance:
         "Photo-realistic food imagery with professional lighting. Warm, appetizing color temperature. Styled as editorial food photography.",
       negativeGuidance:
-        "Do not create unrealistic or plastic-looking food. No oversaturated colors. Avoid clinical or sterile compositions.",
+        "Do not create unrealistic or plastic-looking food. No oversaturated colors. Avoid clinical or sterile compositions. Avoid obvious white steam, smoke, or vapor effects unless the user explicitly asks for them.",
     },
     metadataSchema: {
       type: "object",
@@ -731,7 +731,7 @@ export const CATEGORIES: CategorySeed[] = [
       defaultAspectRatio: "1:1",
       availableAspectRatios: ["1:1", "4:5", "3:4", "16:9"],
       defaultResolution: "2k",
-      supportsTextOverlay: false,
+      supportsTextOverlay: true,
       defaultFormatId: "social-dish",
       formats: [
         {
@@ -868,7 +868,7 @@ export const CATEGORIES: CategorySeed[] = [
       defaultAspectRatio: "1:1",
       availableAspectRatios: ["1:1", "16:9", "A4", "3:2"],
       defaultResolution: "4k",
-      supportsTextOverlay: false,
+      supportsTextOverlay: true,
       defaultFormatId: "brand-square",
       formats: [
         {
@@ -1065,7 +1065,7 @@ export const CATEGORIES: CategorySeed[] = [
         },
       ],
     },
-    styleOptions: ["modern", "minimal", "royal", "gold_foil"],
+    styleOptions: ["modern", "minimal"],
     subcategories: [
       {
         id: "property-listing",
@@ -1165,7 +1165,7 @@ export const CATEGORIES: CategorySeed[] = [
       defaultAspectRatio: "4:5",
       availableAspectRatios: ["4:5", "3:4", "1:1", "9:16"],
       defaultResolution: "2k",
-      supportsTextOverlay: false,
+      supportsTextOverlay: true,
       defaultFormatId: "editorial-portrait",
       formats: [
         {
@@ -1342,7 +1342,7 @@ export const CATEGORIES: CategorySeed[] = [
         },
       ],
     },
-    styleOptions: ["modern", "watercolor", "minimal", "gold_foil", "celestial"],
+    styleOptions: ["modern", "minimal"],
     subcategories: [
       {
         id: "stylized-portrait",
@@ -1735,7 +1735,7 @@ export const CATEGORIES: CategorySeed[] = [
       defaultAspectRatio: "16:9",
       availableAspectRatios: ["16:9", "3:4", "1:1", "4:5"],
       defaultResolution: "2k",
-      supportsTextOverlay: false,
+      supportsTextOverlay: true,
       defaultFormatId: "destination-hero",
       formats: [
         {
