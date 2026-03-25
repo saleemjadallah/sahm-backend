@@ -42,6 +42,8 @@ const DIRECT_DELIVERABLE_SUBCATEGORIES = new Set([
   "travel-poster",
 ]);
 
+const FOOD_DESIGN_SUBCATEGORIES = new Set(["menu-design", "recipe-card"]);
+
 /**
  * Build the Gemini prompt for any category generation.
  *
@@ -131,10 +133,22 @@ export function buildGenerationPrompt(
   const directDeliverable =
     (options?.categoryId && DIRECT_DELIVERABLE_CATEGORIES.has(options.categoryId))
     || (options?.subcategoryId && DIRECT_DELIVERABLE_SUBCATEGORIES.has(options.subcategoryId));
+  const foodPhotographyOutput =
+    options?.categoryId === "food-restaurant"
+    && (!options.subcategoryId || !FOOD_DESIGN_SUBCATEGORIES.has(options.subcategoryId));
 
   if (directDeliverable) {
     parts.push(
       "Render the final design asset itself in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, tabletop shot, wall frame, hand-held card, or lifestyle environment unless the user explicitly asks for a mockup. Show the full deliverable surface with clean edges, production-ready layout, and legible content.",
+    );
+  }
+
+  if (foodPhotographyOutput) {
+    parts.push(
+      "Render a full-bleed food photograph, not a designed poster, card, collage, or framed layout. No decorative borders, celestial motifs, florals, gold-foil treatments, inset windows, paper textures, graphic overlays, or visible text unless the user explicitly asks for them. The plated dish should dominate the frame and read immediately as freshly served, edible, and craveable.",
+    );
+    parts.push(
+      "Push appetite and taste cues: visible heat or steam when appropriate, glossy sauces, crisp edges, moist interiors, fresh garnish, believable texture, and lighting that suggests aroma, warmth, and just-cooked freshness.",
     );
   }
 

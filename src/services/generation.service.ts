@@ -45,6 +45,7 @@ export async function generateSingle(
   const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
   const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const resolvedStyle = style || "modern";
+  assertStyleAllowed(category.styleOptions as string[] | null, resolvedStyle, category.id);
   const selectedOutputFormat = resolveOutputFormat(outputSpecs, outputFormatId, aspectRatio);
   const resolvedAspect =
     aspectRatio
@@ -167,6 +168,7 @@ export async function generatePack(
   const promptConfig = category.promptConfig as unknown as CategoryPromptConfig;
   const outputSpecs = category.outputSpecs as unknown as CategoryOutputSpecs | null;
   const resolvedStyle = style || "modern";
+  assertStyleAllowed(category.styleOptions as string[] | null, resolvedStyle, category.id);
   const totalCost = items.length;
 
   // Debit credits for the whole pack
@@ -359,6 +361,7 @@ export async function regenerateGeneration(
     : null;
 
   const resolvedStyle = newStyle || generation.style || "modern";
+  assertStyleAllowed(category.styleOptions as string[] | null, resolvedStyle, category.id);
   const creditsCost = 1;
 
   // Debit credits
@@ -448,6 +451,20 @@ function resolveOutputFormat(
     outputSpecs.formats.find((format) => format.id === outputSpecs.defaultFormatId)
     || outputSpecs.formats[0]
     || null
+  );
+}
+
+function assertStyleAllowed(
+  styleOptions: string[] | null,
+  style: string,
+  categoryId: string,
+): void {
+  if (!styleOptions?.length) return;
+  if (styleOptions.includes(style)) return;
+
+  throw new ValidationError(
+    `Style '${style}' is not supported for category '${categoryId}'`,
+    { categoryId, style, allowedStyles: styleOptions },
   );
 }
 

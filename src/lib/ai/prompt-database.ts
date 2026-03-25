@@ -435,9 +435,9 @@ const foodRestaurant: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} design.\n\n{{#cuisine}}Cuisine: {{cuisine}}{{/cuisine}}\n{{#dishName}}Dish/Item: {{dishName}}{{/dishName}}\n{{#restaurantName}}Restaurant: {{restaurantName}}{{/restaurantName}}\n{{#mood}}Mood: {{mood}}{{/mood}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Photorealistic food imagery with professional lighting — warm, directional, and appetizing. Shallow depth of field at f/2.8 draws focus to the hero element. Warm color temperature makes food look fresh and inviting. Styled as high-end editorial food photography — the image should make the viewer hungry. Every texture is rendered with appetizing detail: glistening sauces, flaky pastry layers, vibrant vegetable colors, and steam or movement frozen at the perfect moment.",
+        "Photorealistic food imagery with professional lighting — warm, directional, and appetizing. Shallow depth of field at f/2.8 draws focus to the hero element. Warm color temperature makes food look fresh and inviting. Styled as high-end editorial food photography — the image should make the viewer hungry and almost able to taste it. Every texture is rendered with appetizing detail: glistening sauces, flaky pastry layers, crisp edges, moist interiors, vibrant vegetable colors, and steam or movement frozen at the perfect moment.",
       negativeGuidance:
-        "Food should look authentically prepared and naturally appetizing — fresh from the kitchen, not artificially styled or plasticky. Colors should be warm and naturally saturated. The composition should feel like a professional food shoot with intentional styling, not a snapshot.",
+        "Food should look authentically prepared and naturally appetizing — fresh from the kitchen, not artificially styled or plasticky. Colors should be warm and naturally saturated. The composition should feel like a professional food shoot with intentional styling, not a snapshot. Avoid decorative borders, themed frames, or graphic treatments that compete with the dish.",
     },
     {
       id: "cinematic",
@@ -483,7 +483,7 @@ const foodRestaurant: CategoryPromptEntry = {
     {
       subcategoryId: "food-photography",
       promptTemplate:
-        "A photorealistic hero food photograph featuring {{#dishName}}{{dishName}}{{/dishName}}{{#cuisine}} from {{cuisine}} cuisine{{/cuisine}} beautifully plated and styled. The dish sits on a carefully chosen surface — rustic wood, dark slate, or handmade ceramic — with intentional negative space and complementary props: fresh herbs, a linen napkin, or scattered raw ingredients. Warm, directional key light from a large window creates appetizing highlights on glossy sauces and gentle shadows for three-dimensional depth. Shallow depth of field draws focus to the hero element. {{#mood}}The atmosphere is {{mood}}.{{/mood}} Colors are warm and naturally saturated. The image belongs in a premium culinary publication.",
+        "A photorealistic hero food photograph featuring {{#dishName}}{{dishName}}{{/dishName}}{{#cuisine}} from {{cuisine}} cuisine{{/cuisine}} beautifully plated and styled. The dish sits on a carefully chosen surface — rustic wood, dark slate, or handmade ceramic — with intentional negative space and complementary props: fresh herbs, a linen napkin, or scattered raw ingredients. Warm, directional key light from a large window creates appetizing highlights on glossy sauces and gentle shadows for three-dimensional depth. Shallow depth of field draws focus to the hero element. Emphasize sensory deliciousness: steam when appropriate, crisp edges, moist interiors, sauce sheen, and garnish that feels freshly placed. {{#mood}}The atmosphere is {{mood}}.{{/mood}} Colors are warm and naturally saturated. The image belongs in a premium culinary publication. No decorative frame or graphic border.",
     },
     {
       subcategoryId: "menu-design",
@@ -493,7 +493,7 @@ const foodRestaurant: CategoryPromptEntry = {
     {
       subcategoryId: "cafe-social",
       promptTemplate:
-        "A mouthwatering social media post for {{#restaurantName}}{{restaurantName}}{{/restaurantName}}{{#cuisine}}, a {{cuisine}} establishment{{/cuisine}}. The image is a scroll-stopping food visual that demands attention in a busy feed — bold composition, vibrant appetizing colors, and a clear hero dish. {{#dishName}}Featuring: {{dishName}}.{{/dishName}} {{#mood}}The vibe is {{mood}}.{{/mood}} The styling bridges food photography and social media aesthetics — professionally lit and styled, yet feeling approachable and share-worthy. Optimized for Instagram's square format with text-safe zones.",
+        "A mouthwatering social media post for {{#restaurantName}}{{restaurantName}}{{/restaurantName}}{{#cuisine}}, a {{cuisine}} establishment{{/cuisine}}. The image is a scroll-stopping food visual that demands attention in a busy feed — bold composition, vibrant appetizing colors, and a clear hero dish. {{#dishName}}Featuring: {{dishName}}.{{/dishName}} {{#mood}}The vibe is {{mood}}.{{/mood}} The styling bridges food photography and social media aesthetics — professionally lit and styled, yet feeling approachable and share-worthy. Prioritize edible, sensory detail over decorative framing: steam, texture, freshness, and irresistible plating. Optimized for Instagram's square format with text-safe zones, but keep the output full-bleed and borderless unless text is explicitly requested.",
     },
     {
       subcategoryId: "recipe-card",
