@@ -170,7 +170,9 @@ function buildBabyInlineTextPrompt(
 ): string {
   const config = getBabyInlinePromptConfig(designType);
   const exactFieldLines = config.fields
-    .map(({ field, label }) => renderFieldValue(field, label, textContent, languages))
+    .map(({ field, label, languages: fieldLanguages }) =>
+      renderFieldValue(field, label, textContent, languages, fieldLanguages),
+    )
     .filter(Boolean)
     .join("\n");
 
@@ -277,7 +279,7 @@ This must look like a finished luxury stationery design, not a blank template.
 }
 
 function getBabyInlinePromptConfig(designType: string): {
-  fields: Array<{ field: string; label: string }>;
+  fields: Array<{ field: string; label: string; languages?: string[] }>;
   instructions: string[];
   typographyRules: string[];
 } {
@@ -285,7 +287,7 @@ function getBabyInlinePromptConfig(designType: string): {
     case "BABY_BIRTH_ANNOUNCEMENT":
       return {
         fields: [
-          { field: "babyName", label: "Top hero cartouche" },
+          { field: "babyName", label: "Top hero cartouche", languages: ["en", "hi"] },
           { field: "birthDate", label: "Birth date box" },
           { field: "birthTime", label: "Birth time box" },
           { field: "weight", label: "Weight box" },
@@ -294,7 +296,8 @@ function getBabyInlinePromptConfig(designType: string): {
           { field: "additionalInfo", label: "Bottom message panel" },
         ],
         instructions: [
-          "Top hero cartouche: the baby's name only, centered and most prominent.",
+          "Top hero cartouche: render only the non-Arabic baby name lines centered in the upper portion.",
+          "Leave a clean centered line in the lower portion of the hero cartouche for production Arabic calligraphy overlay. Do not render the Arabic hero name yourself.",
           "Middle four-box details panel: birth date, birth time, weight, and length in separate compartments.",
           "Lower ornamental plaque: parents / family names only.",
           "Bottom rectangular message panel: additional note only.",
@@ -553,11 +556,13 @@ function renderFieldValue(
   label: string,
   textContent: Record<string, Record<string, string>>,
   languages: string[],
+  fieldLanguages?: string[],
 ): string | null {
   const values = textContent[field];
   if (!values) return null;
 
-  const lines = languages
+  const langs = fieldLanguages?.length ? languages.filter((lang) => fieldLanguages.includes(lang)) : languages;
+  const lines = langs
     .map((lang) => {
       const value = values[lang];
       return value ? `  - ${lang}: "${value}"` : null;

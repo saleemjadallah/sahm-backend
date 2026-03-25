@@ -34,6 +34,9 @@ export async function compositeText(opts: CompositeOpts): Promise<Buffer> {
     fontKeys.add(fontForLang(lang, "display"));
     fontKeys.add(fontForLang(lang, "body"));
   }
+  for (const zone of layout.zones) {
+    if (zone.fontKey) fontKeys.add(zone.fontKey);
+  }
 
   // Build SVG with embedded fonts and text
   const fontFaceCSS = buildFontFaces([...fontKeys]);
@@ -89,7 +92,7 @@ function buildTextElements(
 
     // Render primary language
     if (primaryText) {
-      const font = fontForLang(primaryLang, zone.fontRole);
+      const font = zone.fontKey ?? fontForLang(primaryLang, zone.fontRole);
       const dir = primaryLang === "ar" ? "rtl" : "ltr";
       elements.push(textEl(primaryText, xPct, yOffset, fontSize, getFontFamily(font), color, anchor, dir, maxWidth, width));
       yOffset += Math.round(fontSize * 1.4);
@@ -101,7 +104,7 @@ function buildTextElements(
       if (!text) continue;
 
       const secFontSize = Math.round(fontSize * zone.secondaryScale);
-      const font = fontForLang(lang, zone.fontRole);
+      const font = zone.fontKey ?? fontForLang(lang, zone.fontRole);
       const dir = lang === "ar" ? "rtl" : "ltr";
       elements.push(textEl(text, xPct, yOffset, secFontSize, getFontFamily(font), color, anchor, dir, maxWidth, width));
       yOffset += Math.round(secFontSize * 1.4);
@@ -175,7 +178,7 @@ function textBoxEls(
 
   for (let blockIndex = 0; blockIndex < fitted.blocks.length; blockIndex++) {
     const block = fitted.blocks[blockIndex];
-    const font = fontForLang(block.lang, zone.fontRole);
+    const font = zone.fontKey ?? fontForLang(block.lang, zone.fontRole);
 
     for (const line of block.lines) {
       const lineCenterY = cursorY + (block.lineHeight / 2);

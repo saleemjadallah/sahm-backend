@@ -15,6 +15,7 @@ export interface TextZone {
   yPct: number;            // vertical center position (% from top)
   fontSizePct: number;     // font size as % of image height
   fontRole: "display" | "body";
+  fontKey?: "arabic-naskh" | "arabic-naskh-bold" | "arabic-ruqaa" | "arabic-ruqaa-bold" | "devanagari" | "english-serif" | "english-body";
   color: string;           // hex color
   align: "left" | "center" | "right";
   maxWidthPct: number;     // max line width as % of image width
@@ -197,6 +198,21 @@ const BABY_BIRTH_ANNOUNCEMENT: TextLayout = {
   ],
 };
 
+const BABY_BIRTH_ANNOUNCEMENT_HERO_ARABIC_OVERLAY: TextLayout = {
+  zones: [
+    framedBox("babyName", { xPct: 30, yPct: 25.8, widthPct: 40, heightPct: 5.4, paddingPct: 2.6 }, {
+      fontRole: "display",
+      fontKey: "arabic-ruqaa-bold",
+      color: "#846d47",
+      fontSizePct: 3.8,
+      fontSizeMinPct: 2.4,
+      fontSizeMaxPct: 4.8,
+      secondaryScale: 1,
+      lineClamp: 1,
+    }),
+  ],
+};
+
 const BABY_NURSERY_ART: TextLayout = {
   zones: [
     { ...heroName("babyName", 50), fontSizePct: 10 },
@@ -250,6 +266,7 @@ const LAYOUTS: Record<string, TextLayout> = {
   WEDDING_INSTAGRAM_POST: WEDDING_SOCIAL,
   WEDDING_WHATSAPP_CARD: WEDDING_SOCIAL,
   BABY_BIRTH_ANNOUNCEMENT,
+  BABY_BIRTH_ANNOUNCEMENT_HERO_ARABIC_OVERLAY,
   BABY_NURSERY_ART,
   BABY_AQEEQAH_INVITE: BABY_CEREMONY_INVITE,
   BABY_MILESTONE_CARD: BABY_MILESTONE,

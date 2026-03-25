@@ -155,22 +155,19 @@ export async function regenerateDesign(
   });
 
   try {
-    let imageBuffer = await generateDesignImage({
+    const imageBuffer = await generateDesignImage({
       prompt: prompt.contentPrompt,
       systemPrompt: prompt.systemPrompt,
       aspectRatio: layoutGuide?.aspectRatio || design.aspectRatio,
     });
+    const finalBuffer = await applyTextLayers(imageBuffer, {
+      textFree: prompt.textFree,
+      designType: design.designType,
+      textContent,
+      languages,
+    });
 
-    if (prompt.textFree) {
-      imageBuffer = await compositeText({
-        background: imageBuffer,
-        designType: design.designType,
-        textContent,
-        languages,
-      });
-    }
-
-    const { previewUrl, fullUrl } = await processGeneratedImage(imageBuffer, design.id, project.id);
+    const { previewUrl, fullUrl } = await processGeneratedImage(finalBuffer, design.id, project.id);
 
     return await prisma.design.update({
       where: { id: design.id },
@@ -212,22 +209,19 @@ export async function editDesign(
   });
 
   try {
-    let imageBuffer = await generateDesignImage({
+    const imageBuffer = await generateDesignImage({
       prompt: prompt.contentPrompt,
       systemPrompt: prompt.systemPrompt,
       aspectRatio: layoutGuide?.aspectRatio || design.aspectRatio,
     });
+    const finalBuffer = await applyTextLayers(imageBuffer, {
+      textFree: prompt.textFree,
+      designType: design.designType,
+      textContent: updatedText,
+      languages,
+    });
 
-    if (prompt.textFree) {
-      imageBuffer = await compositeText({
-        background: imageBuffer,
-        designType: design.designType,
-        textContent: updatedText,
-        languages,
-      });
-    }
-
-    const { previewUrl, fullUrl } = await processGeneratedImage(imageBuffer, design.id, project.id);
+    const { previewUrl, fullUrl } = await processGeneratedImage(finalBuffer, design.id, project.id);
 
     return await prisma.design.update({
       where: { id: design.id },
@@ -256,6 +250,52 @@ interface TextCompositeOpts {
   languages: string[];
 }
 
+function getHybridOverlay(designType: string, textContent: TextContent): TextCompositeOpts | null {
+  if (designType !== "BABY_BIRTH_ANNOUNCEMENT") return null;
+
+  const arabicName = textContent.babyName?.ar?.trim();
+  if (!arabicName) return null;
+
+  return {
+    textFree: true,
+    designType: "BABY_BIRTH_ANNOUNCEMENT_HERO_ARABIC_OVERLAY",
+    textContent: {
+      babyName: { ar: arabicName },
+    },
+    languages: ["ar"],
+  };
+}
+
+async function applyTextLayers(
+  background: Buffer,
+  textOpts?: TextCompositeOpts,
+): Promise<Buffer> {
+  if (!textOpts) return background;
+
+  let layered = background;
+
+  if (textOpts.textFree) {
+    layered = await compositeText({
+      background: layered,
+      designType: textOpts.designType,
+      textContent: textOpts.textContent,
+      languages: textOpts.languages,
+    });
+  }
+
+  const hybridOverlay = getHybridOverlay(textOpts.designType, textOpts.textContent);
+  if (hybridOverlay) {
+    layered = await compositeText({
+      background: layered,
+      designType: hybridOverlay.designType,
+      textContent: hybridOverlay.textContent,
+      languages: hybridOverlay.languages,
+    });
+  }
+
+  return layered;
+}
+
 async function generateOne(
   prisma: PrismaClient,
   record: Design,
@@ -280,15 +320,7 @@ async function generateOne(
       `[design] generateOne:gemini-complete designId=${record.id} type=${record.designType}`,
     );
 
-    // Composite text programmatically for Arabic/Hindi designs
-    const finalBuffer = textOpts?.textFree
-      ? await compositeText({
-          background: rawBuffer,
-          designType: textOpts.designType,
-          textContent: textOpts.textContent,
-          languages: textOpts.languages,
-        })
-      : rawBuffer;
+    const finalBuffer = await applyTextLayers(rawBuffer, textOpts);
 
     console.info(
       `[design] generateOne:upload-start designId=${record.id} type=${record.designType}`,
