@@ -16,6 +16,7 @@ export interface PromptOptions {
   categoryId?: string;
   subcategoryId?: string;
   promptVariant?: string;
+  outputFormatId?: string;
   outputFormatLabel?: string;
   outputFormatDescription?: string;
   outputFormatPromptHint?: string;
@@ -43,6 +44,25 @@ const DIRECT_DELIVERABLE_SUBCATEGORIES = new Set([
 ]);
 
 const FOOD_DESIGN_SUBCATEGORIES = new Set(["menu-design", "recipe-card"]);
+const FASHION_FLATLAY_SUBCATEGORIES = new Set(["outfit-card", "style-board"]);
+const REAL_ESTATE_SUBCATEGORIES = new Set([
+  "property-listing",
+  "room-staging",
+  "interior-concept",
+  "development-marketing",
+]);
+const PORTRAIT_SUBCATEGORIES = new Set([
+  "stylized-portrait",
+  "professional-avatar",
+  "family-portrait",
+  "pet-portrait",
+]);
+const TRAVEL_SCENE_FORMATS = new Set(["destination-hero", "social-postcard"]);
+const FASHION_EDITORIAL_FORMATS = new Set([
+  "editorial-portrait",
+  "lookbook-page",
+  "campaign-story",
+]);
 
 /**
  * Build the Gemini prompt for any category generation.
@@ -98,9 +118,6 @@ export function buildGenerationPrompt(
     }
   }
 
-  // System prompt = category persona + style persona
-  const systemPrompt = `${activeSystemPrompt}\n\n${styleGuide.systemPrompt}`;
-
   // Build content prompt from pieces
   const parts: string[] = [];
 
@@ -122,7 +139,51 @@ export function buildGenerationPrompt(
     parts.push(`User request: ${userPrompt}`);
   }
 
-  // 4. Style description
+  // 4. Style / output mode intent
+  const directDeliverable =
+    (options?.categoryId && DIRECT_DELIVERABLE_CATEGORIES.has(options.categoryId))
+    || (options?.subcategoryId && DIRECT_DELIVERABLE_SUBCATEGORIES.has(options.subcategoryId));
+  const foodPhotographyOutput =
+    options?.categoryId === "food-restaurant"
+    && (!options.subcategoryId || !FOOD_DESIGN_SUBCATEGORIES.has(options.subcategoryId));
+  const realEstateOutput =
+    options?.categoryId === "real-estate"
+    && (!options.subcategoryId || REAL_ESTATE_SUBCATEGORIES.has(options.subcategoryId));
+  const fashionEditorialOutput =
+    options?.categoryId === "fashion"
+    && !directDeliverable
+    && !FASHION_FLATLAY_SUBCATEGORIES.has(options?.subcategoryId ?? "")
+    && (
+      options?.subcategoryId === "lookbook"
+      || !options?.subcategoryId
+      || FASHION_EDITORIAL_FORMATS.has(options?.outputFormatId ?? "")
+    );
+  const fashionFlatlayOutput =
+    options?.categoryId === "fashion"
+    && FASHION_FLATLAY_SUBCATEGORIES.has(options?.subcategoryId ?? "");
+  const portraitOutput =
+    options?.categoryId === "portraits"
+    && (!options.subcategoryId || PORTRAIT_SUBCATEGORIES.has(options.subcategoryId));
+  const travelSceneOutput =
+    options?.categoryId === "travel"
+    && !directDeliverable
+    && (
+      !options?.subcategoryId
+      || TRAVEL_SCENE_FORMATS.has(options?.outputFormatId ?? "")
+    );
+  const restrainedPhotographyOutput =
+    foodPhotographyOutput
+    || realEstateOutput
+    || fashionEditorialOutput
+    || portraitOutput
+    || travelSceneOutput;
+  const styleSystemPrompt = restrainedPhotographyOutput
+    ? `Translate the selected style '${style}' into subtle color mood, finish, and compositional restraint only. Do not introduce decorative borders, frames, overlays, motifs, typography, scrapbook elements, or themed graphic treatments unless the user explicitly asks for them. The subject of the image must remain the clear hero.`
+    : styleGuide.systemPrompt;
+
+  // System prompt = category persona + style persona
+  const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}`;
+
   parts.push(`Visual style: ${styleGuide.description}`);
   parts.push(`Color palette: ${styleGuide.colors}`);
 
@@ -130,12 +191,6 @@ export function buildGenerationPrompt(
   parts.push(`Output aspect ratio: ${aspectRatio}`);
 
   // 6. Render intent for direct-use design assets
-  const directDeliverable =
-    (options?.categoryId && DIRECT_DELIVERABLE_CATEGORIES.has(options.categoryId))
-    || (options?.subcategoryId && DIRECT_DELIVERABLE_SUBCATEGORIES.has(options.subcategoryId));
-  const foodPhotographyOutput =
-    options?.categoryId === "food-restaurant"
-    && (!options.subcategoryId || !FOOD_DESIGN_SUBCATEGORIES.has(options.subcategoryId));
 
   if (directDeliverable) {
     parts.push(
@@ -149,6 +204,51 @@ export function buildGenerationPrompt(
     );
     parts.push(
       "Push appetite and taste cues: visible heat or steam when appropriate, glossy sauces, crisp edges, moist interiors, fresh garnish, believable texture, and lighting that suggests aroma, warmth, and just-cooked freshness.",
+    );
+  }
+
+  if (realEstateOutput) {
+    parts.push(
+      "Render a full-bleed architectural image or interior visualization, not a framed poster, flyer, or decorated layout. No decorative borders, florals, gold-foil accents, celestial motifs, graphic overlays, or visible text unless the user explicitly asks for them. The space itself should dominate the frame and sell immediately at first glance.",
+    );
+    parts.push(
+      "Keep architectural lines physically plausible and visually disciplined: straight verticals, believable lens perspective, grounded furniture, coherent lighting, and material realism that communicates warmth, livability, and premium quality.",
+    );
+  }
+
+  if (fashionEditorialOutput) {
+    parts.push(
+      "Render a full-bleed fashion image with the garment, styling, and subject as the hero. Do not turn it into a decorated card, bordered poster, scrapbook collage, or motif-heavy graphic. No decorative frames, florals, foil treatments, celestial symbols, or visible text unless the user explicitly asks for them.",
+    );
+    parts.push(
+      "Push editorial fashion cues: strong silhouette readability, believable fabric behavior, intentional pose, premium lighting, and texture detail that makes the clothing feel tactile and desirable.",
+    );
+  }
+
+  if (fashionFlatlayOutput) {
+    parts.push(
+      "Render the flat-lay or style board directly as the final composition from a clean overhead or design-board perspective. Do not place it inside a mockup, room scene, ornate frame, scrapbook border, or device screen unless the user explicitly asks for that treatment.",
+    );
+    parts.push(
+      "Keep the arrangement crisp and editorial: clean spacing, balanced placement, fabric and material clarity, and strong visual hierarchy without extraneous decorative motifs competing with the pieces.",
+    );
+  }
+
+  if (portraitOutput) {
+    parts.push(
+      "Render the subject as the clear hero of the portrait. No decorative borders, celestial symbols, foil frames, floating ornaments, typographic overlays, or graphic motifs unless the user explicitly asks for them. Keep the composition portrait-led rather than template-led.",
+    );
+    parts.push(
+      "Prioritize likeness, expression, flattering light, believable skin or medium texture, and clear eye focus so the portrait feels personal, authored, and emotionally specific.",
+    );
+  }
+
+  if (travelSceneOutput) {
+    parts.push(
+      "Render a full-bleed destination scene, not a bordered postcard, framed collage, or decorated travel card. No ornate borders, floral overlays, foil embellishments, or visible text unless the user explicitly asks for them. The place itself should be the hero.",
+    );
+    parts.push(
+      "Emphasize sense of place through light, atmosphere, scale, and culturally specific detail so the viewer immediately feels the destination rather than a generic travel template.",
     );
   }
 

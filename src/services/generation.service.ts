@@ -90,6 +90,7 @@ export async function generateSingle(
     {
       categoryId,
       subcategoryId: subcategory?.id,
+      outputFormatId: selectedOutputFormat?.id,
       promptVariant,
       outputFormatLabel: selectedOutputFormat?.label,
       outputFormatDescription: selectedOutputFormat?.description,
@@ -278,12 +279,13 @@ export async function generatePack(
         {
           categoryId: category.id,
           subcategoryId: subcat?.id,
+          promptVariant: heroPrompt.variantId,
           outputResolution: outputSpecs?.defaultResolution,
         },
       );
 
       const styleRef = heroBuffer
-        ? "\n\nSTYLE REFERENCE: Match the attached reference image's color palette, borders, motifs, and typography mood exactly. Only the layout and content should differ."
+        ? "\n\nSTYLE REFERENCE: Match the attached reference image's color palette, lighting, material treatment, and overall art direction exactly. Preserve decorative motifs or typography only when they are appropriate to the requested deliverable. Only the layout and content should differ."
         : "";
 
       await prisma.generation.update({ where: { id: gen.id }, data: { status: "GENERATING", resolvedPrompt: prompt.contentPrompt } });
@@ -382,6 +384,7 @@ export async function regenerateGeneration(
     {
       categoryId: generation.categoryId,
       subcategoryId: subcategory?.id,
+      outputFormatId: undefined,
       outputResolution: outputSpecs?.defaultResolution,
     },
   );
