@@ -1556,7 +1556,7 @@ export const CATEGORIES: CategorySeed[] = [
       outputGuidance:
         "Clean, professional, and engaging. Readable typography suitable for the target age group. Print-ready quality.",
       negativeGuidance:
-        "Do not create infantile designs for older students. No overly complex layouts for young children. Avoid culturally insensitive imagery.",
+        "Do not create infantile designs for older students. No overly complex layouts for young children. Avoid culturally insensitive imagery. Certificate-style outputs should read as commemorative classroom or viewing pieces, not official legal, academic, or accreditation documents.",
     },
     metadataSchema: {
       type: "object",
@@ -1639,7 +1639,7 @@ export const CATEGORIES: CategorySeed[] = [
         description: "Achievement and completion certificates",
         sortOrder: 1,
         promptTemplate:
-          "A prestigious certificate design. Formal enough to celebrate achievement, with elegant borders and clear hierarchy for name and achievement text.",
+          "A prestigious certificate design for celebration and viewing only. Formal enough to celebrate achievement, with elegant borders and clear hierarchy for name and achievement text, but clearly presented as a commemorative educational design rather than an official diploma, accreditation record, or legal document.",
         defaultAspect: "A4",
       },
       {

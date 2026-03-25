@@ -98,6 +98,16 @@ export interface GenerateImageOpts {
   referenceImage?: Buffer;
 }
 
+function normalizeAspectRatio(aspectRatio?: string): string {
+  switch (aspectRatio) {
+    case "A4":
+    case "A5":
+      return "2:3";
+    default:
+      return aspectRatio || "1:1";
+  }
+}
+
 export async function generateDesignImage(opts: GenerateImageOpts): Promise<Buffer> {
   await semaphore.acquire();
 
@@ -123,7 +133,7 @@ export async function generateDesignImage(opts: GenerateImageOpts): Promise<Buff
         config: {
           responseModalities: ["IMAGE", "TEXT"],
           imageConfig: {
-            aspectRatio: (opts.aspectRatio || "1:1") as any,
+            aspectRatio: normalizeAspectRatio(opts.aspectRatio) as any,
             imageSize: opts.imageSize || "2K",
           },
         },

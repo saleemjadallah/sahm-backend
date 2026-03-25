@@ -189,6 +189,11 @@ export function buildGenerationPrompt(
 
   // 5. Aspect ratio
   parts.push(`Output aspect ratio: ${aspectRatio}`);
+  if (aspectRatio === "A4" || aspectRatio === "A5") {
+    parts.push(
+      `Compose with the visual rhythm and page structure of an ${aspectRatio} print layout. Keep margins, spacing, hierarchy, and safe text zones appropriate for a printable portrait page even if the renderer uses the nearest supported portrait ratio internally.`,
+    );
+  }
 
   // 6. Render intent for direct-use design assets
 
