@@ -22,6 +22,26 @@ export interface PromptOptions {
   outputResolution?: string;
 }
 
+const DIRECT_DELIVERABLE_CATEGORIES = new Set([
+  "event-stationery",
+  "wall-art",
+  "greeting-cards",
+  "social-media",
+  "business",
+  "religious-art",
+  "education",
+]);
+
+const DIRECT_DELIVERABLE_SUBCATEGORIES = new Set([
+  "menu-design",
+  "recipe-card",
+  "collection-announcement",
+  "destination-art",
+  "hotel-welcome",
+  "itinerary-design",
+  "travel-poster",
+]);
+
 /**
  * Build the Gemini prompt for any category generation.
  *
@@ -107,7 +127,18 @@ export function buildGenerationPrompt(
   // 5. Aspect ratio
   parts.push(`Output aspect ratio: ${aspectRatio}`);
 
-  // 6. Output format intent
+  // 6. Render intent for direct-use design assets
+  const directDeliverable =
+    (options?.categoryId && DIRECT_DELIVERABLE_CATEGORIES.has(options.categoryId))
+    || (options?.subcategoryId && DIRECT_DELIVERABLE_SUBCATEGORIES.has(options.subcategoryId));
+
+  if (directDeliverable) {
+    parts.push(
+      "Render the final design asset itself in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, tabletop shot, wall frame, hand-held card, or lifestyle environment unless the user explicitly asks for a mockup. Show the full deliverable surface with clean edges, production-ready layout, and legible content.",
+    );
+  }
+
+  // 7. Output format intent
   if (options?.outputFormatLabel) {
     const formatSummary = options.outputFormatDescription
       ? `${options.outputFormatLabel} — ${options.outputFormatDescription}`
@@ -123,7 +154,7 @@ export function buildGenerationPrompt(
     parts.push(`Format guidance: ${options.outputFormatPromptHint}`);
   }
 
-  // 7. Output guidance
+  // 8. Output guidance
   if (activeOutputGuidance) {
     const filledGuidance = metadata
       ? fillTemplate(activeOutputGuidance, metadata)
@@ -131,7 +162,7 @@ export function buildGenerationPrompt(
     parts.push(filledGuidance);
   }
 
-  // 8. Quality guidance (positive framing)
+  // 9. Quality guidance (positive framing)
   if (activeNegativeGuidance) {
     parts.push(`Quality guidance: ${activeNegativeGuidance}`);
   }

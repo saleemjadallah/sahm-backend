@@ -48,11 +48,11 @@ const eventStationery: CategoryPromptEntry = {
       label: "Default",
       weight: 0.55,
       systemPrompt:
-        "You are a luxury stationery designer and art director at a high-end atelier specializing in bespoke ceremonial print pieces. You think in terms of paper weight, printing techniques — letterpress, foil stamping, thermography, blind emboss — and color theory. You compose designs as a photographer composes a shot: considering negative space, visual hierarchy, focal points, and the viewer's eye path. Every design you create looks like it was photographed for a feature spread in Martha Stewart Weddings or Harper's Bazaar Arabia. You instinctively adapt typography, ornament vocabulary, and motif choices to the cultural tradition of the celebration — Arabic Thuluth or Naskh calligraphy for Middle Eastern events, Devanagari for Indian ceremonies, refined serif or script faces for Western traditions. Text is never an afterthought; it is the architectural centerpiece of the composition.",
+        "You are a luxury stationery designer and art director at a high-end atelier specializing in bespoke ceremonial print pieces. You think in terms of paper weight, printing techniques — letterpress, foil stamping, thermography, blind emboss — and color theory. You compose designs with the same rigor a photographer composes a shot: considering negative space, visual hierarchy, focal points, and the viewer's eye path. Every design you create is worthy of a feature spread in Martha Stewart Weddings or Harper's Bazaar Arabia. You instinctively adapt typography, ornament vocabulary, and motif choices to the cultural tradition of the celebration — Arabic Thuluth or Naskh calligraphy for Middle Eastern events, Devanagari for Indian ceremonies, refined serif or script faces for Western traditions. Text is never an afterthought; it is the architectural centerpiece of the composition.",
       contextTemplate:
         "Create a {{subcategory}} design.\n\n{{#eventType}}Event type: {{eventType}}{{/eventType}}\n{{#names}}Names: {{names}}{{/names}}\n{{#date}}Date: {{date}}{{/date}}\n{{#venue}}Venue: {{venue}}{{/venue}}\n{{#additionalInfo}}Details: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Deliver a print-ready design at 300 DPI with clean edges suitable for die-cutting or premium printing. The composition should have a clear visual hierarchy — decorative borders and motifs frame the content without overwhelming the text. Typography should be set with generous letter-spacing and line-height. The overall feel should be that of a photographed invitation resting on a marble surface under soft directional window light, captured with an 85mm lens at f/2.8.",
+        "Deliver a print-ready design at 300 DPI with clean edges suitable for die-cutting or premium printing. The composition should have a clear visual hierarchy — decorative borders and motifs frame the content without overwhelming the text. Typography should be set with generous letter-spacing and line-height. Present the invitation itself as the final front-facing design surface, with full bleed coverage or a clean page edge, not as a styled tabletop mockup.",
       negativeGuidance:
         "All text areas should contain meaningful, contextually appropriate content matching the provided metadata. Every visual element should appear hand-crafted and original, consistent with bespoke atelier production. Textures and surfaces should be rich, high-resolution, and physically convincing — showing realistic paper grain, ink absorption, or foil reflection appropriate to the design.",
     },
@@ -74,11 +74,11 @@ const eventStationery: CategoryPromptEntry = {
       label: "Editorial",
       weight: 0.15,
       systemPrompt:
-        "You are the creative director of a luxury stationery brand whose work is regularly featured in Vogue Living, Monocle, and Kinfolk. Your editorial eye means every piece you design could be the hero image of a magazine spread. You obsess over art direction: the perfect prop styling, the ideal crop, the relationship between positive and negative space. Your stationery tells a story of refined taste — modern yet timeless, minimal yet warm. You curate every element as if building a still-life photograph.",
+        "You are the creative director of a luxury stationery brand whose work is regularly featured in Vogue Living, Monocle, and Kinfolk. Your editorial eye means every piece you design could be the hero image of a magazine spread. You obsess over art direction: the ideal crop, the relationship between positive and negative space, and the precision of every typographic and ornamental decision. Your stationery tells a story of refined taste — modern yet timeless, minimal yet warm. You curate every element as an intentional design composition.",
       contextTemplate:
         "Create a {{subcategory}} design with editorial sophistication.\n\n{{#eventType}}Event type: {{eventType}}{{/eventType}}\n{{#names}}Names: {{names}}{{/names}}\n{{#date}}Date: {{date}}{{/date}}\n{{#venue}}Venue: {{venue}}{{/venue}}\n{{#additionalInfo}}Details: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Magazine-cover quality composition. The design should look like a curated editorial photograph — intentional styling, considered prop placement if visible, and a clear visual narrative. Typography is the hero: perfectly set, generously spaced, and treated as graphic art. The layout follows editorial design principles: clear grid structure, asymmetric balance, and deliberate use of white space as a design element. Print-ready at 300 DPI.",
+        "Magazine-cover quality composition. The design should feel curated and editorial, with a clear visual narrative built entirely within the deliverable itself. Typography is the hero: perfectly set, generously spaced, and treated as graphic art. The layout follows editorial design principles: clear grid structure, asymmetric balance, and deliberate use of white space as a design element. Print-ready at 300 DPI.",
       negativeGuidance:
         "Every element should serve the editorial narrative — each ornament, each color choice, each typographic decision should feel intentional and curated. The design should feel authored, not templated. Surfaces and textures should be refined and tactile, suggesting luxury without ostentation.",
     },
@@ -91,7 +91,7 @@ const eventStationery: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} design emphasizing tactile print craft.\n\n{{#eventType}}Event type: {{eventType}}{{/eventType}}\n{{#names}}Names: {{names}}{{/names}}\n{{#date}}Date: {{date}}{{/date}}\n{{#venue}}Venue: {{venue}}{{/venue}}\n{{#additionalInfo}}Details: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "The design should emphasize physical materiality. Visible paper texture — whether cotton rag, linen, or handmade — should be apparent throughout. Printing techniques should be visually evident: deep letterpress deboss creating shadows in the paper, foil stamping catching light with metallic reflections, or thermographic ink with subtle dimensional raise. Edges may show deckle, torn, or die-cut finishing. Close-up macro photography perspective at f/4, revealing every fiber and impression. 300 DPI print-ready.",
+        "The design should emphasize physical materiality. Visible paper texture — whether cotton rag, linen, or handmade — should be apparent throughout. Printing techniques should be visually evident: deep letterpress deboss creating shadows in the paper, foil stamping catching light with metallic reflections, or thermographic ink with subtle dimensional raise. Edges may show deckle, torn, or die-cut finishing. Surface detail should hold up at close inspection, revealing every fiber and impression. 300 DPI print-ready.",
       negativeGuidance:
         "All surfaces should show convincing physical texture at macro scale — visible paper fibers, ink absorption patterns, metallic foil reflection. The design should suggest a specific printing technique and paper stock. Typography should appear physically impressed or applied to the surface, not floating on top of it.",
     },
@@ -100,7 +100,7 @@ const eventStationery: CategoryPromptEntry = {
     {
       subcategoryId: "wedding-invitation",
       promptTemplate:
-        "A premium wedding invitation card photographed resting on a marble surface under soft directional light. The invitation features elegant calligraphy with the couple's names as the focal point, surrounded by ornamental borders and culturally appropriate motifs. {{#names}}The names '{{names}}' are rendered in flowing calligraphic script as the centerpiece.{{/names}} {{#date}}The date '{{date}}' appears in refined secondary typography.{{/date}} {{#venue}}The venue '{{venue}}' is elegantly set below.{{/venue}} The paper stock appears heavyweight and cotton-textured. The overall mood is intimate, celebratory, and culturally resonant.",
+        "A premium wedding invitation card presented as the final flat design itself, with elegant calligraphy and the couple's names as the focal point, surrounded by ornamental borders and culturally appropriate motifs. {{#names}}The names '{{names}}' are rendered in flowing calligraphic script as the centerpiece.{{/names}} {{#date}}The date '{{date}}' appears in refined secondary typography.{{/date}} {{#venue}}The venue '{{venue}}' is elegantly set below.{{/venue}} The paper stock should feel heavyweight and cotton-textured through the surface treatment, while the overall mood remains intimate, celebratory, and culturally resonant.",
     },
     {
       subcategoryId: "save-the-date",
@@ -154,7 +154,7 @@ const wallArt: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} wall art piece.\n\n{{#text}}Text/phrase: {{text}}{{/text}}\n{{#room}}Intended room: {{room}}{{/room}}\n{{#theme}}Theme: {{theme}}{{/theme}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "High-resolution artwork suitable for large-format gallery printing on fine art paper or canvas. Rich detail that rewards close viewing — visible brushstrokes, texture variations, and nuanced color transitions. Balanced composition that works as a wall-mounted piece. The image should look like a photograph of a finished art print captured with a 50mm lens under gallery lighting, showing the artwork's full surface quality.",
+        "High-resolution artwork suitable for large-format gallery printing on fine art paper or canvas. Rich detail that rewards close viewing — visible brushstrokes, texture variations, and nuanced color transitions. Balanced composition that works as a wall-mounted piece. Render the artwork itself in a clean, front-facing presentation that shows the full surface quality without framing it inside a room or gallery mockup.",
       negativeGuidance:
         "All visual elements should appear hand-crafted and original — consistent with gallery-quality fine art production. Compositions should maintain clarity and impact at large print sizes. Detail should be rich and consistent across the entire piece, with no flat or under-rendered areas.",
     },
@@ -193,7 +193,7 @@ const wallArt: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} wall art piece emphasizing physical texture and material quality.\n\n{{#text}}Text/phrase: {{text}}{{/text}}\n{{#room}}Intended room: {{room}}{{/room}}\n{{#theme}}Theme: {{theme}}{{/theme}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "The artwork should emphasize tactile, physical materiality as if photographed with a macro lens at f/4. Visible texture throughout — paint ridges casting micro-shadows, metallic leaf catching light, paper fibers, or plaster surface irregularities. The piece should appear three-dimensional, with layered materials creating genuine depth. Gallery-quality production suitable for close inspection.",
+        "The artwork should emphasize tactile, physical materiality at close viewing scale. Visible texture throughout — paint ridges casting micro-shadows, metallic leaf catching light, paper fibers, or plaster surface irregularities. The piece should appear three-dimensional, with layered materials creating genuine depth. Gallery-quality production suitable for close inspection.",
       negativeGuidance:
         "All surfaces should show convincing physical depth and material quality at close inspection. Textures should cast realistic micro-shadows consistent with directional lighting. The artwork should suggest a specific physical medium and technique — not generic digital smoothness.",
     },
@@ -246,7 +246,7 @@ const greetingCards: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} greeting card.\n\n{{#recipientName}}For: {{recipientName}}{{/recipientName}}\n{{#message}}Message: {{message}}{{/message}}\n{{#occasion}}Occasion: {{occasion}}{{/occasion}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Print-ready card design focused on the front cover. Bold, emotionally resonant imagery with clear space for a personalized message. The design should look like a photograph of a premium greeting card captured with a 50mm lens — showing paper texture, printing quality, and tactile appeal. The composition should be immediately recognizable in its occasion and emotionally engaging at first glance.",
+        "Print-ready card design focused on the front cover. Bold, emotionally resonant imagery with clear space for a personalized message. Present the card itself as the final front-facing design surface, showing printing quality and tactile appeal through the artwork rather than through a photographed mockup. The composition should be immediately recognizable in its occasion and emotionally engaging at first glance.",
       negativeGuidance:
         "All imagery should be original, hand-crafted in feel, and culturally authentic. The design should feel like a premium boutique card, not a mass-produced template. Color choices should be emotionally appropriate for the occasion — warm and vibrant for celebrations, soft and gentle for sympathy.",
     },
@@ -259,7 +259,7 @@ const greetingCards: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} greeting card with cinematic atmosphere.\n\n{{#recipientName}}For: {{recipientName}}{{/recipientName}}\n{{#message}}Message: {{message}}{{/message}}\n{{#occasion}}Occasion: {{occasion}}{{/occasion}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "The card should have cinematic lighting and color grading — warm glows, atmospheric haze, dramatic shadows, and rich tonal depth. The scene captured should feel like a still from a beautifully photographed film. Print-ready with bold colors that maintain impact.",
+        "The card should have cinematic lighting and color grading — warm glows, atmospheric haze, dramatic shadows, and rich tonal depth. The visual atmosphere should evoke a still from a beautifully photographed film while remaining a direct, print-ready card design. Print-ready with bold colors that maintain impact.",
       negativeGuidance:
         "Lighting should be atmospheric and motivated by the scene — lantern glow, candlelight, sunset, or starlight. Colors should have cinematic depth and richness. The design should evoke an emotional response through light and atmosphere.",
     },
@@ -285,7 +285,7 @@ const greetingCards: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} greeting card emphasizing tactile craft quality.\n\n{{#recipientName}}For: {{recipientName}}{{/recipientName}}\n{{#message}}Message: {{message}}{{/message}}\n{{#occasion}}Occasion: {{occasion}}{{/occasion}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "The card should emphasize physical materiality — visible paper texture, printing technique details, and craft quality. Photographed as if under macro lens at f/4, revealing paper fibers, foil reflections, and embossed dimensionality. The card should feel like a premium keepsake you would treasure.",
+        "The card should emphasize physical materiality — visible paper texture, printing technique details, and craft quality. Surface detail should reveal paper fibers, foil reflections, and embossed dimensionality without turning the output into a photographic mockup. The card should feel like a premium keepsake you would treasure.",
       negativeGuidance:
         "All surfaces should show convincing physical texture and material quality. The card should suggest a specific printing technique — letterpress, foil stamping, or embossing. Paper stock should appear premium and weighty.",
     },
@@ -488,7 +488,7 @@ const foodRestaurant: CategoryPromptEntry = {
     {
       subcategoryId: "menu-design",
       promptTemplate:
-        "An elegant restaurant menu design with clear typography hierarchy and beautiful layout. {{#restaurantName}}For '{{restaurantName}}'.{{/restaurantName}} {{#cuisine}}Featuring {{cuisine}} cuisine.{{/cuisine}} The menu has a refined structure: restaurant name and logo at the header, course categories in distinguished subheadings, dish names in clear readable type, and descriptions in lighter secondary text. Subtle food photography or illustrations may accent the layout. {{#mood}}The design mood is {{mood}}.{{/mood}} The paper texture suggests premium cardstock. The layout is clean, readable, and appropriately branded for the restaurant's positioning.",
+        "An elegant restaurant menu design with clear typography hierarchy and beautiful layout. {{#restaurantName}}For '{{restaurantName}}'.{{/restaurantName}} {{#cuisine}}Featuring {{cuisine}} cuisine.{{/cuisine}} The menu has a refined structure: restaurant name and logo at the header, course categories in distinguished subheadings, dish names in clear readable type, and descriptions in lighter secondary text. Subtle food photography or illustrations may accent the layout. {{#mood}}The design mood is {{mood}}.{{/mood}} The paper texture suggests premium cardstock. Present the menu itself as a clean, front-facing design layout that is readable, branded, and ready for real restaurant use.",
     },
     {
       subcategoryId: "cafe-social",
@@ -498,7 +498,7 @@ const foodRestaurant: CategoryPromptEntry = {
     {
       subcategoryId: "recipe-card",
       promptTemplate:
-        "A beautifully designed recipe card combining appetizing food imagery with clean, readable recipe layout. {{#dishName}}Recipe: {{dishName}}.{{/dishName}} {{#cuisine}}Cuisine: {{cuisine}}.{{/cuisine}} The card features a hero food photograph at the top, followed by ingredient list and step-by-step instructions in clear, hierarchical typography. The design balances visual appeal with practical usability — someone should be able to cook from this card. {{#mood}}Style: {{mood}}.{{/mood}} Premium card stock texture with a warm, inviting color palette.",
+        "A beautifully designed recipe card combining appetizing food imagery with clean, readable recipe layout. {{#dishName}}Recipe: {{dishName}}.{{/dishName}} {{#cuisine}}Cuisine: {{cuisine}}.{{/cuisine}} The card features a hero food image at the top, followed by ingredient list and step-by-step instructions in clear, hierarchical typography. The design balances visual appeal with practical usability — someone should be able to cook from this card. {{#mood}}Style: {{mood}}.{{/mood}} Premium card stock texture with a warm, inviting color palette. Present the recipe card itself as the final readable design asset, not a tabletop mockup.",
     },
   ],
 };
@@ -517,7 +517,7 @@ const business: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} design.\n\n{{#companyName}}Company: {{companyName}}{{/companyName}}\n{{#industry}}Industry: {{industry}}{{/industry}}\n{{#brandColors}}Brand colors: {{brandColors}}{{/brandColors}}\n{{#tagline}}Tagline: {{tagline}}{{/tagline}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Print-ready or presentation-quality professional design. Clean alignment, intentional white space, and precise typography. The design should communicate the company's professionalism and industry positioning. Corporate but not sterile — modern, refined, and trustworthy. {{#brandColors}}Brand colors '{{brandColors}}' should be incorporated as the primary palette.{{/brandColors}} The result should look like a photograph of premium business materials captured on a clean desk surface under soft office lighting.",
+        "Print-ready or presentation-quality professional design. Clean alignment, intentional white space, and precise typography. The design should communicate the company's professionalism and industry positioning. Corporate but not sterile — modern, refined, and trustworthy. {{#brandColors}}Brand colors '{{brandColors}}' should be incorporated as the primary palette.{{/brandColors}} Present the final business asset itself in a clean, front-facing layout rather than as a photographed desk mockup.",
       negativeGuidance:
         "All design elements should feel bespoke and professionally crafted — consistent with premium corporate branding, not free template aesthetics. Typography should be clean, well-kerned, and hierarchically clear. White space should feel intentional and generous.",
     },
@@ -526,11 +526,11 @@ const business: CategoryPromptEntry = {
       label: "Cinematic",
       weight: 0.15,
       systemPrompt:
-        "You are a branding designer who brings cinematic production value to corporate materials. Your business cards look like they belong in a luxury brand film — shot on marble surfaces with dramatic directional lighting, deep shadows, and rich material finishes. Your presentation covers have the visual impact of film title cards. You understand that in competitive markets, the perceived production value of business materials signals the caliber of the company behind them.",
+        "You are a branding designer who brings cinematic production value to corporate materials. Your business cards and letterheads carry the drama and confidence of a luxury brand film through composition, contrast, and material finish rather than through mockup photography. Your presentation covers have the visual impact of film title cards. You understand that in competitive markets, the perceived production value of business materials signals the caliber of the company behind them.",
       contextTemplate:
         "Create a {{subcategory}} design with cinematic production value.\n\n{{#companyName}}Company: {{companyName}}{{/companyName}}\n{{#industry}}Industry: {{industry}}{{/industry}}\n{{#brandColors}}Brand colors: {{brandColors}}{{/brandColors}}\n{{#tagline}}Tagline: {{tagline}}{{/tagline}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Premium corporate materials with cinematic presentation — dramatic lighting, rich material surfaces, and high production value. The design should convey luxury, authority, and sophisticated brand presence. Materials should look like they are photographed for a premium brand campaign.",
+        "Premium corporate materials with cinematic presentation — dramatic contrast, rich material surfaces, and high production value. The design should convey luxury, authority, and sophisticated brand presence while remaining a direct business asset, not a photographed campaign mockup.",
       negativeGuidance:
         "Materials should convey premium quality through rich surfaces, dramatic lighting, and cinematic depth. Typography should be commanding and precisely set. The overall presentation should signal elite professional caliber.",
     },
@@ -539,7 +539,7 @@ const business: CategoryPromptEntry = {
       label: "Editorial",
       weight: 0.15,
       systemPrompt:
-        "You are a branding designer whose work appears in the annual reports and brand identity features of design publications like Brand New, It's Nice That, and Communication Arts. Your corporate materials have editorial polish — they could be case study photographs in a design portfolio. Clean grids, considered type choices, and a restrained palette communicate intelligence and sophistication. Your business cards are miniature design compositions. Your letterheads are exercises in typographic hierarchy.",
+        "You are a branding designer whose work appears in the annual reports and brand identity features of design publications like Brand New, It's Nice That, and Communication Arts. Your corporate materials have editorial polish — they could anchor the case study spread of a design portfolio. Clean grids, considered type choices, and a restrained palette communicate intelligence and sophistication. Your business cards are miniature design compositions. Your letterheads are exercises in typographic hierarchy.",
       contextTemplate:
         "Create a {{subcategory}} design with editorial design quality.\n\n{{#companyName}}Company: {{companyName}}{{/companyName}}\n{{#industry}}Industry: {{industry}}{{/industry}}\n{{#brandColors}}Brand colors: {{brandColors}}{{/brandColors}}\n{{#tagline}}Tagline: {{tagline}}{{/tagline}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
@@ -556,7 +556,7 @@ const business: CategoryPromptEntry = {
       contextTemplate:
         "Create a {{subcategory}} design emphasizing premium material quality.\n\n{{#companyName}}Company: {{companyName}}{{/companyName}}\n{{#industry}}Industry: {{industry}}{{/industry}}\n{{#brandColors}}Brand colors: {{brandColors}}{{/brandColors}}\n{{#tagline}}Tagline: {{tagline}}{{/tagline}}\n{{#additionalInfo}}Notes: {{additionalInfo}}{{/additionalInfo}}",
       outputGuidance:
-        "Premium corporate materials emphasizing physical material quality. Visible paper texture, printing technique details — letterpress impression, blind emboss, spot UV, edge painting. The materials should look like close-up photographs revealing craft and substance. Premium, weighty, and tactile.",
+        "Premium corporate materials emphasizing physical material quality. Visible paper texture, printing technique details — letterpress impression, blind emboss, spot UV, edge painting. Craft and substance should be clear within the design surface itself. Premium, weighty, and tactile.",
       negativeGuidance:
         "Paper stock should appear thick, premium, and texturally rich. Printing techniques should be visually evident and physically convincing. The materials should suggest significant investment in production quality.",
     },
@@ -565,7 +565,7 @@ const business: CategoryPromptEntry = {
     {
       subcategoryId: "business-card",
       promptTemplate:
-        "A premium business card design with clean, professional layout and strong brand personality. {{#companyName}}Company: '{{companyName}}'.{{/companyName}} {{#tagline}}Tagline: '{{tagline}}'.{{/tagline}} {{#industry}}Industry: {{industry}}.{{/industry}} The card has clear information hierarchy: company name and logo prominently placed, contact name in secondary emphasis, and details (title, phone, email) in clean supporting typography. {{#brandColors}}Using brand colors: {{brandColors}}.{{/brandColors}} The design is photographed on a clean surface showing both front face with subtle paper texture and professional printing quality. Standard business card proportions.",
+        "A premium business card design with clean, professional layout and strong brand personality. {{#companyName}}Company: '{{companyName}}'.{{/companyName}} {{#tagline}}Tagline: '{{tagline}}'.{{/tagline}} {{#industry}}Industry: {{industry}}.{{/industry}} The card has clear information hierarchy: company name and logo prominently placed, contact name in secondary emphasis, and details (title, phone, email) in clean supporting typography. {{#brandColors}}Using brand colors: {{brandColors}}.{{/brandColors}} Show the business card design itself in standard proportions with subtle surface texture and professional print quality, not as a desk or tabletop mockup.",
     },
     {
       subcategoryId: "letterhead",
@@ -1077,12 +1077,12 @@ const travel: CategoryPromptEntry = {
     {
       subcategoryId: "hotel-welcome",
       promptTemplate:
-        "An elegant hotel welcome card that makes guests feel special and valued upon arrival. {{#hotelName}}From '{{hotelName}}'.{{/hotelName}} {{#destination}}In {{destination}}.{{/destination}} The card features warm, inviting design — the hotel's branding elegantly presented with a personal welcome message. {{#theme}}Theme: {{theme}}.{{/theme}} Design elements reference the destination's culture or the hotel's design aesthetic. Premium card stock texture with refined typography. The card sits beautifully on a bedside table or desk — photographed in warm, ambient room lighting. 4:5 portrait format.",
+        "An elegant hotel welcome card that makes guests feel special and valued upon arrival. {{#hotelName}}From '{{hotelName}}'.{{/hotelName}} {{#destination}}In {{destination}}.{{/destination}} The card features warm, inviting design — the hotel's branding elegantly presented with a personal welcome message. {{#theme}}Theme: {{theme}}.{{/theme}} Design elements reference the destination's culture or the hotel's design aesthetic. Premium card stock texture with refined typography. Present the welcome card itself as the final 4:5 portrait design rather than a photographed room or desk scene.",
     },
     {
       subcategoryId: "itinerary-design",
       promptTemplate:
-        "A beautifully designed travel itinerary combining practical organization with destination imagery. {{#destination}}For a trip to {{destination}}.{{/destination}} {{#hotelName}}Staying at '{{hotelName}}'.{{/hotelName}} The layout has a clear timeline structure — day-by-day or segment-by-segment — with beautiful destination photography or illustrations accompanying each section. {{#theme}}Theme: {{theme}}.{{/theme}} {{#season}}Season: {{season}}.{{/season}} Typography is clean and readable. The design balances practical travel information with aspirational visual storytelling. A4 format with magazine-quality layout.",
+        "A beautifully designed travel itinerary combining practical organization with destination imagery. {{#destination}}For a trip to {{destination}}.{{/destination}} {{#hotelName}}Staying at '{{hotelName}}'.{{/hotelName}} The layout has a clear timeline structure — day-by-day or segment-by-segment — with beautiful destination photography or illustrations accompanying each section. {{#theme}}Theme: {{theme}}.{{/theme}} {{#season}}Season: {{season}}.{{/season}} Typography is clean and readable. The design balances practical travel information with aspirational visual storytelling. A4 format with magazine-quality layout presented as the final itinerary page itself.",
     },
     {
       subcategoryId: "travel-poster",
