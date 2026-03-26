@@ -3,8 +3,9 @@ import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js
 import { buildGenerationPrompt } from "../lib/ai/prompts.js";
 import { getCategory } from "../lib/categories/index.js";
 import { processGeneratedImage } from "./image.service.js";
-import { debitCreditsInTransaction } from "./credit.service.js";
+import { debitCreditsInTransaction, grantSignupBonus } from "./credit.service.js";
 import { NotFoundError, GeminiError, ValidationError } from "../errors/index.js";
+import { SUBSCRIPTION_CREDITS } from "../config/constants.js";
 import type {
   CategoryPromptConfig,
   CategoryOutputSpecs,
@@ -422,6 +423,8 @@ export async function unlockGenerationExport(
     }
 
     if (generation.creditsCost > 0) {
+      await grantSignupBonus(tx, userId, SUBSCRIPTION_CREDITS.FREE);
+
       await debitCreditsInTransaction(
         tx,
         userId,

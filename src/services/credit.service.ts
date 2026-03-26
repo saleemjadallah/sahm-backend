@@ -1,5 +1,6 @@
 import type { PrismaClient, CreditTransaction, CreditTxnType, Prisma } from "@prisma/client";
 import { InsufficientCreditsError } from "../errors/index.js";
+import { SUBSCRIPTION_CREDITS } from "../config/constants.js";
 
 type CreditDbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -11,6 +12,8 @@ export async function getBalance(
   prisma: PrismaClient,
   userId: string,
 ): Promise<{ balance: number; lifetimeEarned: number; lifetimeSpent: number }> {
+  await grantSignupBonus(prisma, userId, SUBSCRIPTION_CREDITS.FREE);
+
   const bal = await prisma.creditBalance.upsert({
     where: { userId },
     update: {},
@@ -62,37 +65,20 @@ export async function creditCredits(
   referenceId?: string,
   description?: string,
 ): Promise<CreditTransaction> {
-  return prisma.$transaction(async (tx) => {
-    // Read current balance first, then update — avoids Prisma increment return value ambiguity
-    const existing = await tx.creditBalance.findUnique({ where: { userId } });
-    const oldBalance = existing?.balance ?? 0;
-    const newBalance = oldBalance + amount;
+  return prisma.$transaction((tx) =>
+    creditCreditsInternal(tx, userId, amount, type, referenceId, description),
+  );
+}
 
-    await tx.creditBalance.upsert({
-      where: { userId },
-      update: {
-        balance: newBalance,
-        lifetimeEarned: { increment: amount },
-      },
-      create: {
-        userId,
-        balance: amount,
-        lifetimeEarned: amount,
-        lifetimeSpent: 0,
-      },
-    });
-
-    return tx.creditTransaction.create({
-      data: {
-        userId,
-        type,
-        amount,
-        balance: newBalance,
-        stripePaymentId: type === "PURCHASE" ? referenceId : undefined,
-        description: description || `Added ${amount} credit(s)`,
-      },
-    });
-  });
+export async function creditCreditsInTransaction(
+  prisma: Prisma.TransactionClient,
+  userId: string,
+  amount: number,
+  type: CreditTxnType,
+  referenceId?: string,
+  description?: string,
+): Promise<CreditTransaction> {
+  return creditCreditsInternal(prisma, userId, amount, type, referenceId, description);
 }
 
 /**
@@ -140,7 +126,7 @@ export async function getTransactions(
  * Grant signup bonus credits (idempotent — only grants once).
  */
 export async function grantSignupBonus(
-  prisma: PrismaClient,
+  prisma: CreditDbClient,
   userId: string,
   bonusCredits: number,
 ): Promise<void> {
@@ -149,7 +135,7 @@ export async function grantSignupBonus(
   });
   if (existing) return; // Already granted
 
-  await creditCredits(
+  await creditCreditsInternal(
     prisma,
     userId,
     bonusCredits,
@@ -196,6 +182,44 @@ async function debitCreditsInternal(
       generationId: type === "GENERATION" ? referenceId : undefined,
       packId: type === "PACK_GENERATION" ? referenceId : undefined,
       description: description || `Spent ${amount} credit(s)`,
+    },
+  });
+}
+
+async function creditCreditsInternal(
+  prisma: CreditDbClient,
+  userId: string,
+  amount: number,
+  type: CreditTxnType,
+  referenceId?: string,
+  description?: string,
+): Promise<CreditTransaction> {
+  const existing = await prisma.creditBalance.findUnique({ where: { userId } });
+  const oldBalance = existing?.balance ?? 0;
+  const newBalance = oldBalance + amount;
+
+  await prisma.creditBalance.upsert({
+    where: { userId },
+    update: {
+      balance: newBalance,
+      lifetimeEarned: { increment: amount },
+    },
+    create: {
+      userId,
+      balance: amount,
+      lifetimeEarned: amount,
+      lifetimeSpent: 0,
+    },
+  });
+
+  return prisma.creditTransaction.create({
+    data: {
+      userId,
+      type,
+      amount,
+      balance: newBalance,
+      stripePaymentId: type === "PURCHASE" ? referenceId : undefined,
+      description: description || `Added ${amount} credit(s)`,
     },
   });
 }
