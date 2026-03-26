@@ -175,6 +175,7 @@ model CreditTransaction {
 
   @@index([userId])
   @@index([createdAt])
+  @@unique([userId, type, stripePaymentId])
 }
 
 enum CreditTxnType {

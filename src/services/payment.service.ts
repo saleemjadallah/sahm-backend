@@ -65,7 +65,6 @@ const MANAGED_SUBSCRIPTION_STATUSES = new Set([
   "trialing",
   "past_due",
   "unpaid",
-  "incomplete",
 ]);
 
 // ─── Create Credit Purchase Checkout ─────────────────

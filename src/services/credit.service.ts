@@ -1,7 +1,14 @@
-import type { PrismaClient, CreditTransaction, CreditTxnType, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { PrismaClient, CreditTransaction, CreditTxnType } from "@prisma/client";
 import { InsufficientCreditsError } from "../errors/index.js";
 
 type CreditDbClient = PrismaClient | Prisma.TransactionClient;
+
+function isUniqueConstraintError(
+  err: unknown,
+): err is Prisma.PrismaClientKnownRequestError {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
 
 /**
  * Get current credit balance for a user.
@@ -189,15 +196,37 @@ async function creditCreditsInternal(
     },
   });
 
-  return prisma.creditTransaction.create({
-    data: {
-      userId,
-      type,
-      amount,
-      balance: newBalance,
-      stripePaymentId:
-        type === "PURCHASE" || type === "SUBSCRIPTION" ? referenceId : undefined,
-      description: description || `Added ${amount} credit(s)`,
-    },
-  });
+  try {
+    return await prisma.creditTransaction.create({
+      data: {
+        userId,
+        type,
+        amount,
+        balance: newBalance,
+        stripePaymentId:
+          type === "PURCHASE" || type === "SUBSCRIPTION" ? referenceId : undefined,
+        description: description || `Added ${amount} credit(s)`,
+      },
+    });
+  } catch (err) {
+    if (
+      referenceId
+      && (type === "PURCHASE" || type === "SUBSCRIPTION")
+      && isUniqueConstraintError(err)
+    ) {
+      const existingTxn = await prisma.creditTransaction.findFirst({
+        where: {
+          userId,
+          type,
+          stripePaymentId: referenceId,
+        },
+      });
+
+      if (existingTxn) {
+        return existingTxn;
+      }
+    }
+
+    throw err;
+  }
 }
