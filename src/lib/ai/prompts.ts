@@ -132,26 +132,34 @@ export function buildGenerationPrompt(
   // Build content prompt from pieces
   const parts: string[] = [];
 
-  // 1. Category context template filled with metadata (factual data: institution, subject, etc.)
-  if (metadata) {
-    parts.push(fillTemplate(activeContextTemplate, metadata));
-  }
-
-  // 2. Subcategory prompt + user prompt strategy:
-  //    - When the user provides their own prompt, the detailed subcategory template
-  //      is REPLACED with a minimal type identifier. The user's words drive the design.
-  //    - When there is no user prompt, the full template serves as the design direction.
   if (userPrompt) {
-    // Minimal type context — just tells Gemini WHAT it is, not HOW to lay it out
-    const subcategoryLabel = options?.subcategoryId?.replace(/-/g, " ") || "design";
-    parts.push(`Design type: ${subcategoryLabel}.`);
+    // ── User-driven mode ──────────────────────────────────────
+    // Strip everything down to: raw metadata values + user's words.
+    // No "Create a X design", no "Design type: X" — these labels
+    // trigger Gemini's prior to fill in a complete template.
+    if (metadata) {
+      const metadataLines = Object.entries(metadata)
+        .filter(([, v]) => v !== undefined && v !== null && v !== "")
+        .map(([k, v]) => `${k}: ${String(v)}`)
+        .join("\n");
+      if (metadataLines) parts.push(metadataLines);
+    }
     parts.push(`DESIGNER'S CREATIVE DIRECTION: ${userPrompt}`);
-  } else if (activeSubcategoryPrompt) {
-    // No user prompt — the template IS the full design direction
-    const filledSubPrompt = metadata
-      ? fillTemplate(activeSubcategoryPrompt, metadata)
-      : activeSubcategoryPrompt;
-    parts.push(filledSubPrompt);
+    parts.push(
+      "Do NOT add any text, names, titles, descriptions, dates, or signature lines that the designer did not explicitly request. If the designer asked for empty or blank areas, leave them empty.",
+    );
+  } else {
+    // ── Template-driven mode (no user prompt) ─────────────────
+    // Full templates serve as the design direction.
+    if (metadata) {
+      parts.push(fillTemplate(activeContextTemplate, metadata));
+    }
+    if (activeSubcategoryPrompt) {
+      const filledSubPrompt = metadata
+        ? fillTemplate(activeSubcategoryPrompt, metadata)
+        : activeSubcategoryPrompt;
+      parts.push(filledSubPrompt);
+    }
   }
 
   // 4. Style / output mode intent
@@ -321,7 +329,7 @@ export function buildGenerationPrompt(
   // 10. Reinforce user's creative direction as the final word
   if (userPrompt) {
     parts.push(
-      `IMPORTANT: Follow the designer's creative direction exactly. Only include elements they explicitly requested. Leave areas empty or blank if the designer asked for that. Do not add placeholder text, sample names, or filler content.`,
+      `CRITICAL: The designer's creative direction is the sole content authority. Do NOT invent or add any text the designer did not ask for — no fake names, no placeholder titles like "Certificate of Achievement", no achievement descriptions, no dates, no signature lines, no labels. If the designer said "empty" or "only", render exactly and only what they specified. Blank space is intentional.`,
     );
   }
 
