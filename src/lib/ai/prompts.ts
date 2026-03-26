@@ -92,6 +92,19 @@ export function buildGenerationPrompt(
   options?: PromptOptions,
 ): GenerationPrompt {
   const styleGuide = STYLE_GUIDES[style] || STYLE_GUIDES.modern;
+  const effectiveUserPrompt = resolveEffectiveUserPrompt(
+    userPrompt,
+    metadata,
+    options,
+  );
+  const metadataLineExclusions = new Set(["userPrompt"]);
+  if (
+    !userPrompt?.trim()
+    && effectiveUserPrompt
+    && effectiveUserPrompt === readMetadataText(metadata, "additionalInfo")
+  ) {
+    metadataLineExclusions.add("additionalInfo");
+  }
 
   // Try to use enhanced prompts from the prompt database
   let activeSystemPrompt = categoryConfig.systemPrompt;
@@ -132,19 +145,20 @@ export function buildGenerationPrompt(
   // Build content prompt from pieces
   const parts: string[] = [];
 
-  if (userPrompt) {
+  if (effectiveUserPrompt) {
     // ── User-driven mode ──────────────────────────────────────
     // Strip everything down to: raw metadata values + user's words.
     // No "Create a X design", no "Design type: X" — these labels
     // trigger Gemini's prior to fill in a complete template.
     if (metadata) {
       const metadataLines = Object.entries(metadata)
+        .filter(([key]) => !metadataLineExclusions.has(key))
         .filter(([, v]) => v !== undefined && v !== null && v !== "")
         .map(([k, v]) => `${k}: ${String(v)}`)
         .join("\n");
       if (metadataLines) parts.push(metadataLines);
     }
-    parts.push(`DESIGNER'S CREATIVE DIRECTION: ${userPrompt}`);
+    parts.push(`DESIGNER'S CREATIVE DIRECTION: ${effectiveUserPrompt}`);
     parts.push(
       "Do NOT add any text, names, titles, descriptions, dates, or signature lines that the designer did not explicitly request. If the designer asked for empty or blank areas, leave them empty.",
     );
@@ -209,7 +223,7 @@ export function buildGenerationPrompt(
       : styleGuide.systemPrompt;
 
   // System prompt = category persona + style persona + user priority rule
-  const userPriorityRule = userPrompt
+  const userPriorityRule = effectiveUserPrompt
     ? "\n\nThe user has provided their own creative direction. Follow it exactly. Only include elements the user explicitly asks for. Do not invent placeholder names, sample text, or filler content that the user did not request."
     : "";
   const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}${userPriorityRule}`;
@@ -221,7 +235,7 @@ export function buildGenerationPrompt(
   parts.push(`Output aspect ratio: ${aspectRatio}`);
   if (aspectRatio === "A4" || aspectRatio === "A5") {
     parts.push(
-      userPrompt
+      effectiveUserPrompt
         ? `Compose with the proportions of an ${aspectRatio} print layout in portrait orientation.`
         : `Compose with the visual rhythm and page structure of an ${aspectRatio} print layout. Keep margins, spacing, hierarchy, and safe text zones appropriate for a printable portrait page even if the renderer uses the nearest supported portrait ratio internally.`,
     );
@@ -231,7 +245,7 @@ export function buildGenerationPrompt(
 
   if (directDeliverable) {
     parts.push(
-      userPrompt
+      effectiveUserPrompt
         ? "Render the final design asset in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, or lifestyle environment."
         : "Render the final design asset itself in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, tabletop shot, wall frame, hand-held card, or lifestyle environment unless the user explicitly asks for a mockup. Show the full deliverable surface with clean edges, production-ready layout, and legible content.",
     );
@@ -297,8 +311,19 @@ export function buildGenerationPrompt(
     );
   }
 
+  if (options?.subcategoryId === "certificate") {
+    parts.push(
+      "Certificate text is opt-in only. Do not add any title, recipient name, achievement description, date, signature line, seal label, or other copy unless it is explicitly provided in the prompt or metadata.",
+    );
+    if (shouldRenderInstitutionOnly(metadata)) {
+      parts.push(
+        "The institution name is the only supplied text content. Render only the institution name in the requested header position and keep the remainder of the design free of visible text.",
+      );
+    }
+  }
+
   // 7. Output format intent — skip text-heavy hints when user drives the design
-  if (!userPrompt && options?.outputFormatLabel) {
+  if (!effectiveUserPrompt && options?.outputFormatLabel) {
     const formatSummary = options.outputFormatDescription
       ? `${options.outputFormatLabel} — ${options.outputFormatDescription}`
       : options.outputFormatLabel;
@@ -309,12 +334,12 @@ export function buildGenerationPrompt(
     parts.push(`Target resolution: ${options.outputResolution}`);
   }
 
-  if (!userPrompt && options?.outputFormatPromptHint) {
+  if (!effectiveUserPrompt && options?.outputFormatPromptHint) {
     parts.push(`Format guidance: ${options.outputFormatPromptHint}`);
   }
 
   // 8. Output guidance — skip when user provides their own direction
-  if (!userPrompt && activeOutputGuidance) {
+  if (!effectiveUserPrompt && activeOutputGuidance) {
     const filledGuidance = metadata
       ? fillTemplate(activeOutputGuidance, metadata)
       : activeOutputGuidance;
@@ -322,12 +347,12 @@ export function buildGenerationPrompt(
   }
 
   // 9. Quality guidance — skip when user provides their own direction
-  if (!userPrompt && activeNegativeGuidance) {
+  if (!effectiveUserPrompt && activeNegativeGuidance) {
     parts.push(`Quality guidance: ${activeNegativeGuidance}`);
   }
 
   // 10. Reinforce user's creative direction as the final word
-  if (userPrompt) {
+  if (effectiveUserPrompt) {
     parts.push(
       `CRITICAL: The designer's creative direction is the sole content authority. Do NOT invent or add any text the designer did not ask for — no fake names, no placeholder titles like "Certificate of Achievement", no achievement descriptions, no dates, no signature lines, no labels. If the designer said "empty" or "only", render exactly and only what they specified. Blank space is intentional.`,
     );
@@ -367,4 +392,62 @@ function fillTemplate(
   });
 
   return result.trim();
+}
+
+function resolveEffectiveUserPrompt(
+  userPrompt: string | null,
+  metadata: Record<string, unknown> | null,
+  options?: PromptOptions,
+): string | null {
+  const trimmedUserPrompt = userPrompt?.trim();
+  if (trimmedUserPrompt) return trimmedUserPrompt;
+
+  const additionalInfo = readMetadataText(metadata, "additionalInfo");
+  if (!additionalInfo) return null;
+
+  return isRestrictiveTextInstruction(additionalInfo, options)
+    ? additionalInfo
+    : null;
+}
+
+function readMetadataText(
+  metadata: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isRestrictiveTextInstruction(
+  instruction: string,
+  options?: PromptOptions,
+): boolean {
+  if (
+    /do\s*not\s+add|don't\s+add|dont\s+add|no\s+extra\s+text|no\s+other\s+text|leave.*blank|keep.*blank|text-free|without\s+text/i.test(
+      instruction,
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    options?.subcategoryId === "certificate"
+    && /(only|just).*(school|institution|name|header|logo|text)/i.test(instruction)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function shouldRenderInstitutionOnly(
+  metadata: Record<string, unknown> | null,
+): boolean {
+  return Boolean(
+    readMetadataText(metadata, "institution")
+      && !readMetadataText(metadata, "recipientName")
+      && !readMetadataText(metadata, "subject"),
+  );
 }
