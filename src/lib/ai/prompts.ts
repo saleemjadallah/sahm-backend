@@ -132,34 +132,26 @@ export function buildGenerationPrompt(
   // Build content prompt from pieces
   const parts: string[] = [];
 
-  // 1. Category context template filled with metadata
+  // 1. Category context template filled with metadata (factual data: institution, subject, etc.)
   if (metadata) {
     parts.push(fillTemplate(activeContextTemplate, metadata));
   }
 
-  // 2. Subcategory-specific prompt fragment (also fill with metadata)
-  if (activeSubcategoryPrompt) {
+  // 2. Subcategory prompt + user prompt strategy:
+  //    - When the user provides their own prompt, the detailed subcategory template
+  //      is REPLACED with a minimal type identifier. The user's words drive the design.
+  //    - When there is no user prompt, the full template serves as the design direction.
+  if (userPrompt) {
+    // Minimal type context — just tells Gemini WHAT it is, not HOW to lay it out
+    const subcategoryLabel = options?.subcategoryId?.replace(/-/g, " ") || "design";
+    parts.push(`Design type: ${subcategoryLabel}.`);
+    parts.push(`DESIGNER'S CREATIVE DIRECTION: ${userPrompt}`);
+  } else if (activeSubcategoryPrompt) {
+    // No user prompt — the template IS the full design direction
     const filledSubPrompt = metadata
       ? fillTemplate(activeSubcategoryPrompt, metadata)
       : activeSubcategoryPrompt;
     parts.push(filledSubPrompt);
-  }
-
-  // 3. User's free-text prompt — elevated as the authoritative creative direction
-  if (userPrompt) {
-    const hasRestrictiveIntent =
-      /\b(empty|blank|only|just|without|no\s+text|don'?t|do\s*n[o']?t|exclude|remove|nothing|none|skip|omit|leave\s+out|no\s+name|no\s+logo|plain|bare)\b/i.test(
-        userPrompt,
-      );
-    if (hasRestrictiveIntent) {
-      parts.push(
-        `🎯 DESIGNER'S CREATIVE DIRECTION (overrides all template defaults above): ${userPrompt}\n\nThe designer has given restrictive or specific instructions. Any elements described in the template above that conflict with this directive MUST be omitted. Only include elements the designer explicitly asks for. Do not fill in placeholder text, sample names, or example content for fields the designer did not request.`,
-      );
-    } else {
-      parts.push(
-        `🎯 DESIGNER'S CREATIVE DIRECTION (takes priority over template defaults): ${userPrompt}\n\nAdapt the template to serve this vision. Where the designer's direction conflicts with template suggestions, follow the designer.`,
-      );
-    }
   }
 
   // 4. Style / output mode intent
@@ -210,7 +202,7 @@ export function buildGenerationPrompt(
 
   // System prompt = category persona + style persona + user priority rule
   const userPriorityRule = userPrompt
-    ? "\n\nCRITICAL — USER CREATIVE DIRECTION: The user provides their own creative brief below. Their specific instructions are the PRIMARY directive and override any default template suggestions. If the user's vision conflicts with template defaults — requesting fewer elements, different content, a blank or empty layout, specific additions, or any modification — follow the user's instructions exactly and disregard the conflicting template guidance. The template is a starting point; the user's words are the final authority."
+    ? "\n\nThe user has provided their own creative direction. Follow it exactly. Only include elements the user explicitly asks for. Do not invent placeholder names, sample text, or filler content that the user did not request."
     : "";
   const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}${userPriorityRule}`;
 
@@ -325,7 +317,7 @@ export function buildGenerationPrompt(
   // 10. Reinforce user's creative direction as the final word
   if (userPrompt) {
     parts.push(
-      `FINAL REMINDER: The designer's CREATIVE DIRECTION stated above is the primary guide for this generation. Where any template default or suggestion conflicts with the designer's stated intent, the designer's intent wins. Do not add elements the designer did not ask for.`,
+      `IMPORTANT: Follow the designer's creative direction exactly. Only include elements they explicitly requested. Leave areas empty or blank if the designer asked for that. Do not add placeholder text, sample names, or filler content.`,
     );
   }
 
