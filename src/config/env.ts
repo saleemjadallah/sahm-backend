@@ -52,4 +52,7 @@ export const env = cleanEnv(process.env, {
   // WhatsApp (Phase 2)
   WHATSAPP_TOKEN: str({ default: "" }),
   WHATSAPP_PHONE_ID: str({ default: "" }),
+
+  // Meta Conversions API
+  META_CAPI_TOKEN: str({ default: "" }),
 });

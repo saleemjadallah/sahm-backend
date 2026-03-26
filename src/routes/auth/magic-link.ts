@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { sendMagicLink, verifyMagicLink } from "../../services/auth.service.js";
+import { trackCompleteRegistration, getClientIp } from "../../lib/meta/capi.js";
 
 const sendSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -29,6 +30,13 @@ export async function magicLinkRoutes(fastify: FastifyInstance): Promise<void> {
     const body = verifySchema.parse(request.body);
 
     const result = await verifyMagicLink(fastify.prisma, body.email, body.token);
+
+    trackCompleteRegistration({
+      email: result.user.email,
+      userId: result.user.id,
+      ip: getClientIp(request),
+      userAgent: request.headers["user-agent"],
+    });
 
     return reply.status(200).send({
       success: true,

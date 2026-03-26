@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { CREDIT_PACKS, SUBSCRIPTION_CREDITS, type CreditPackKey } from "../config/constants.js";
 import { PaymentError, ValidationError } from "../errors/index.js";
 import { creditCredits } from "./credit.service.js";
+import { trackPurchase } from "../lib/meta/capi.js";
 import type { CreditPurchaseRequest, CheckoutResponse } from "../types/index.js";
 
 let _stripe: Stripe | null = null;
@@ -120,7 +121,7 @@ async function handleCheckoutCompleted(
   prisma: PrismaClient,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
-  const { userId, purchaseType, credits } = session.metadata || {};
+  const { userId, purchaseType, credits, packSize } = session.metadata || {};
 
   if (!userId || purchaseType !== "CREDIT_PACK" || !credits) return;
 
@@ -135,6 +136,24 @@ async function handleCheckoutCompleted(
     session.payment_intent as string,
     `Purchased ${creditAmount} credits`,
   );
+
+  // Fire Meta CAPI Purchase event
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
+  if (user) {
+    const pack = packSize ? CREDIT_PACKS[packSize as CreditPackKey] : undefined;
+    trackPurchase({
+      email: user.email,
+      userId,
+      currency: "AED",
+      value: pack ? pack.priceAed / 100 : (session.amount_total ?? 0) / 100,
+      contentName: `${creditAmount} Credits`,
+      transactionId: session.payment_intent as string,
+    });
+  }
 }
 
 async function handleInvoicePaid(

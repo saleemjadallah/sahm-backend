@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { getBalance, getTransactions } from "../../services/credit.service.js";
 import { createCreditCheckout } from "../../services/payment.service.js";
+import { trackInitiateCheckout, getClientIp } from "../../lib/meta/capi.js";
+import { CREDIT_PACKS, type CreditPackKey } from "../../config/constants.js";
 import type { CreditPurchaseRequest } from "../../types/index.js";
 
 export async function creditRoutes(fastify: FastifyInstance) {
@@ -56,6 +58,20 @@ export async function creditRoutes(fastify: FastifyInstance) {
     { preHandler: [requireAuth] },
     async (request, reply) => {
       const result = await createCreditCheckout(request.userId!, request.body);
+
+      const pack = CREDIT_PACKS[request.body.packSize as CreditPackKey];
+      if (pack && request.user) {
+        trackInitiateCheckout({
+          email: request.user.email,
+          userId: request.userId!,
+          ip: getClientIp(request),
+          userAgent: request.headers["user-agent"],
+          currency: "AED",
+          value: pack.priceAed / 100,
+          contentName: `${pack.credits} Credits`,
+        });
+      }
+
       return reply.send({ success: true, data: result });
     },
   );
