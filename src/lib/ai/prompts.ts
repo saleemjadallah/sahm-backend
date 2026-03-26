@@ -63,6 +63,17 @@ const FASHION_EDITORIAL_FORMATS = new Set([
   "lookbook-page",
   "campaign-story",
 ]);
+const BORDERLESS_SUBCATEGORIES = new Set([
+  "thank-you-greeting",
+  "congratulations-card",
+  "condolence-card",
+  "eid-card",
+  "ramadan-card",
+  "diwali-card",
+  "christmas-card",
+  "national-day-card",
+  "certificate",
+]);
 
 /**
  * Build the Gemini prompt for any category generation.
@@ -177,9 +188,13 @@ export function buildGenerationPrompt(
     || fashionEditorialOutput
     || portraitOutput
     || travelSceneOutput;
+  const borderlessSubcategory =
+    options?.subcategoryId && BORDERLESS_SUBCATEGORIES.has(options.subcategoryId);
   const styleSystemPrompt = restrainedPhotographyOutput
     ? `Translate the selected style '${style}' into subtle color mood, finish, and compositional restraint only. Do not introduce decorative borders, frames, overlays, motifs, typography, scrapbook elements, or themed graphic treatments unless the user explicitly asks for them. The subject of the image must remain the clear hero.`
-    : styleGuide.systemPrompt;
+    : borderlessSubcategory
+      ? `${styleGuide.systemPrompt}\n\nIMPORTANT: Do not add decorative borders, frames, or background padding around the design. The artwork must fill the entire canvas edge-to-edge. Translate border or frame references in the style into integrated design elements, patterns, or textures that extend to the edges rather than framing the content.`
+      : styleGuide.systemPrompt;
 
   // System prompt = category persona + style persona
   const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}`;
@@ -254,6 +269,12 @@ export function buildGenerationPrompt(
     );
     parts.push(
       "Emphasize sense of place through light, atmosphere, scale, and culturally specific detail so the viewer immediately feels the destination rather than a generic travel template.",
+    );
+  }
+
+  if (options?.subcategoryId && BORDERLESS_SUBCATEGORIES.has(options.subcategoryId)) {
+    parts.push(
+      "IMPORTANT: The design must fill the entire canvas edge-to-edge. Do not add decorative borders, frames, margin strips, or background padding around the artwork. The imagery, patterns, and colors should extend to all four edges with no visible border or background gap. Treat the full output area as the live design surface.",
     );
   }
 

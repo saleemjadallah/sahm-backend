@@ -1639,7 +1639,7 @@ export const CATEGORIES: CategorySeed[] = [
         description: "Achievement and completion certificates",
         sortOrder: 1,
         promptTemplate:
-          "A prestigious certificate design for celebration and viewing only. Formal enough to celebrate achievement, with elegant borders and clear hierarchy for name and achievement text, but clearly presented as a commemorative educational design rather than an official diploma, accreditation record, or legal document.",
+          "A prestigious certificate design for celebration and viewing only. Formal enough to celebrate achievement, with clear hierarchy for name and achievement text. The design fills the entire canvas edge-to-edge with no decorative borders, frames, or background margins. Clearly presented as a commemorative educational design rather than an official diploma, accreditation record, or legal document.",
         defaultAspect: "A4",
       },
       {

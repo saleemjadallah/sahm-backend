@@ -319,7 +319,7 @@ const greetingCards: CategoryPromptEntry = {
     {
       subcategoryId: "thank-you-greeting",
       promptTemplate:
-        "A heartfelt thank-you greeting card expressing sincere gratitude with warm, elegant design. 'Thank You' or its cultural equivalent is rendered in beautiful typography as the primary element. {{#message}}The message '{{message}}' is included.{{/message}} {{#recipientName}}For '{{recipientName}}'.{{/recipientName}} Soft florals, gentle watercolor washes, or refined geometric borders create an intimate, appreciative mood. The color palette is warm and inviting — soft golds, blush pinks, sage greens, or warm creams.",
+        "A heartfelt thank-you greeting card expressing sincere gratitude with warm, elegant design. 'Thank You' or its cultural equivalent is rendered in beautiful typography as the primary element. {{#message}}The message '{{message}}' is included.{{/message}} {{#recipientName}}For '{{recipientName}}'.{{/recipientName}} Soft florals, gentle watercolor washes, or refined geometric motifs create an intimate, appreciative mood. The design fills the entire canvas edge-to-edge with no decorative borders, frames, or background margins. The color palette is warm and inviting — soft golds, blush pinks, sage greens, or warm creams.",
     },
     {
       subcategoryId: "congratulations-card",
@@ -990,7 +990,7 @@ const education: CategoryPromptEntry = {
     {
       subcategoryId: "certificate",
       promptTemplate:
-        "A prestigious certificate design celebrating achievement with formal elegance, intended as a commemorative educational visual for viewing only. {{#institution}}From '{{institution}}'.{{/institution}} {{#recipientName}}Awarded to '{{recipientName}}'.{{/recipientName}} {{#subject}}For: {{subject}}.{{/subject}} {{#ageGroup}}Age group: {{ageGroup}}.{{/ageGroup}} The certificate has elegant borders — ornate frames, laurel wreaths, or geometric patterns — with clear hierarchy: institution name at the header, a prominent 'Certificate of Achievement' or similar title, the recipient's name in distinguished calligraphic or serif typography, and the achievement description below. Space for signatures and a ceremonial seal, but the overall piece should read as a commemorative classroom design rather than an official diploma, accreditation record, transcript, or legal document. Premium paper texture suggests formality and permanence.",
+        "A prestigious certificate design celebrating achievement with formal elegance, intended as a commemorative educational visual for viewing only. {{#institution}}From '{{institution}}'.{{/institution}} {{#recipientName}}Awarded to '{{recipientName}}'.{{/recipientName}} {{#subject}}For: {{subject}}.{{/subject}} {{#ageGroup}}Age group: {{ageGroup}}.{{/ageGroup}} The design fills the entire canvas edge-to-edge with no decorative borders, frames, or background margins. Clear hierarchy: institution name at the header, a prominent 'Certificate of Achievement' or similar title, the recipient's name in distinguished calligraphic or serif typography, and the achievement description below. Subtle laurel wreaths or geometric motifs may appear as integrated design elements but not as border frames. Space for signatures and a ceremonial seal, but the overall piece should read as a commemorative classroom design rather than an official diploma, accreditation record, transcript, or legal document. Premium paper texture suggests formality and permanence.",
     },
     {
       subcategoryId: "classroom-decor",
