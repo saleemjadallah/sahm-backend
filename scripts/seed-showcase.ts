@@ -22,8 +22,11 @@ dotenv.config();
 import { PrismaClient } from "@prisma/client";
 import { generateSingle } from "../src/services/generation.service.js";
 import path from "path";
-import { writeFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { writeFileSync, readFileSync } from "fs";
 import type { GenerateRequest } from "../src/types/index.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const prisma = new PrismaClient();
 
@@ -118,10 +121,10 @@ const SHOWCASE_REQUESTS: GenerateRequest[] = [
     categoryId: "religious-art",
     style: "islamic",
     metadata: {
-      artType: "calligraphy",
-      theme: "quran_verse",
+      artType: "geometric",
+      theme: "spiritual",
     },
-    userPrompt: "Beautiful Islamic calligraphy art of Bismillah in gold Thuluth script on a deep teal background with subtle arabesque patterns",
+    userPrompt: "Serene Islamic geometric art with interlocking star patterns in emerald green and gold, peaceful spiritual atmosphere with soft ambient light",
   },
   {
     categoryId: "education",
@@ -174,9 +177,7 @@ async function main() {
 
   let existing: Record<string, { previewUrl: string; generationId: string }> = {};
   try {
-    existing = JSON.parse(
-      (await import("fs")).readFileSync(outputPath, "utf-8"),
-    );
+    existing = JSON.parse(readFileSync(outputPath, "utf-8"));
   } catch {
     // First run — start fresh
   }
