@@ -145,9 +145,21 @@ export function buildGenerationPrompt(
     parts.push(filledSubPrompt);
   }
 
-  // 3. User's free-text prompt
+  // 3. User's free-text prompt — elevated as the authoritative creative direction
   if (userPrompt) {
-    parts.push(`User request: ${userPrompt}`);
+    const hasRestrictiveIntent =
+      /\b(empty|blank|only|just|without|no\s+text|don'?t|do\s*n[o']?t|exclude|remove|nothing|none|skip|omit|leave\s+out|no\s+name|no\s+logo|plain|bare)\b/i.test(
+        userPrompt,
+      );
+    if (hasRestrictiveIntent) {
+      parts.push(
+        `🎯 DESIGNER'S CREATIVE DIRECTION (overrides all template defaults above): ${userPrompt}\n\nThe designer has given restrictive or specific instructions. Any elements described in the template above that conflict with this directive MUST be omitted. Only include elements the designer explicitly asks for. Do not fill in placeholder text, sample names, or example content for fields the designer did not request.`,
+      );
+    } else {
+      parts.push(
+        `🎯 DESIGNER'S CREATIVE DIRECTION (takes priority over template defaults): ${userPrompt}\n\nAdapt the template to serve this vision. Where the designer's direction conflicts with template suggestions, follow the designer.`,
+      );
+    }
   }
 
   // 4. Style / output mode intent
@@ -196,8 +208,11 @@ export function buildGenerationPrompt(
       ? `${styleGuide.systemPrompt}\n\nIMPORTANT: Do not add decorative borders, frames, or background padding around the design. The artwork must fill the entire canvas edge-to-edge. Translate border or frame references in the style into integrated design elements, patterns, or textures that extend to the edges rather than framing the content.`
       : styleGuide.systemPrompt;
 
-  // System prompt = category persona + style persona
-  const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}`;
+  // System prompt = category persona + style persona + user priority rule
+  const userPriorityRule = userPrompt
+    ? "\n\nCRITICAL — USER CREATIVE DIRECTION: The user provides their own creative brief below. Their specific instructions are the PRIMARY directive and override any default template suggestions. If the user's vision conflicts with template defaults — requesting fewer elements, different content, a blank or empty layout, specific additions, or any modification — follow the user's instructions exactly and disregard the conflicting template guidance. The template is a starting point; the user's words are the final authority."
+    : "";
+  const systemPrompt = `${activeSystemPrompt}\n\n${styleSystemPrompt}${userPriorityRule}`;
 
   parts.push(`Visual style: ${styleGuide.description}`);
   parts.push(`Color palette: ${styleGuide.colors}`);
@@ -305,6 +320,13 @@ export function buildGenerationPrompt(
   // 9. Quality guidance (positive framing)
   if (activeNegativeGuidance) {
     parts.push(`Quality guidance: ${activeNegativeGuidance}`);
+  }
+
+  // 10. Reinforce user's creative direction as the final word
+  if (userPrompt) {
+    parts.push(
+      `FINAL REMINDER: The designer's CREATIVE DIRECTION stated above is the primary guide for this generation. Where any template default or suggestion conflicts with the designer's stated intent, the designer's intent wins. Do not add elements the designer did not ask for.`,
+    );
   }
 
   const contentPrompt = parts.filter(Boolean).join("\n\n");
