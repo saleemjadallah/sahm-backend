@@ -44,9 +44,19 @@ export async function translateRoutes(fastify: FastifyInstance) {
   );
 
   // POST /api/translate/ui — batch translate UI strings
+  // Accepts either Clerk auth OR x-api-key header (for build-time scripts)
   fastify.post(
     "/ui",
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [
+        async (request: FastifyRequest, reply: FastifyReply) => {
+          const apiKey = request.headers["x-api-key"];
+          const expected = process.env.TRANSLATION_API_KEY;
+          if (expected && apiKey === expected) return; // bypass auth
+          return requireAuth(request, reply);
+        },
+      ],
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = translateUISchema.parse(request.body);
 
