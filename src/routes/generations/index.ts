@@ -6,7 +6,7 @@ import {
   unlockGenerationExport,
 } from "../../services/generation.service.js";
 import { ForbiddenError, NotFoundError } from "../../errors/index.js";
-import { buildDesignKey, getFile } from "../../lib/storage/r2-client.js";
+import { buildDesignKey, getFile, deleteFile } from "../../lib/storage/r2-client.js";
 import type { GenerateRequest, RegenerateRequest, GenerationResponse } from "../../types/index.js";
 
 function toResponse(g: {
@@ -146,6 +146,31 @@ export async function generationRoutes(fastify: FastifyInstance) {
         userPrompt,
       );
       return reply.send({ success: true, data: toResponse(generation) });
+    },
+  );
+
+  // DELETE /api/generations/:id — delete a generation and its stored images
+  fastify.delete<{ Params: { id: string } }>(
+    "/:id",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const userId = request.userId!;
+      const generation = await fastify.prisma.generation.findFirst({
+        where: { id: request.params.id, userId },
+      });
+      if (!generation) throw new NotFoundError("Generation");
+
+      // Delete stored images from R2 (best-effort — don't block on storage errors)
+      const variants = ["preview", "full"] as const;
+      await Promise.allSettled(
+        variants.map((v) =>
+          deleteFile(buildDesignKey(`gen/${userId}`, generation.id, v)),
+        ),
+      );
+
+      await fastify.prisma.generation.delete({ where: { id: generation.id } });
+
+      return reply.code(200).send({ success: true });
     },
   );
 
