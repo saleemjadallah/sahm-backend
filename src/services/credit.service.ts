@@ -1,6 +1,5 @@
 import type { PrismaClient, CreditTransaction, CreditTxnType, Prisma } from "@prisma/client";
 import { InsufficientCreditsError } from "../errors/index.js";
-import { SUBSCRIPTION_CREDITS } from "../config/constants.js";
 
 type CreditDbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -12,8 +11,6 @@ export async function getBalance(
   prisma: PrismaClient,
   userId: string,
 ): Promise<{ balance: number; lifetimeEarned: number; lifetimeSpent: number }> {
-  await grantSignupBonus(prisma, userId, SUBSCRIPTION_CREDITS.FREE);
-
   const bal = await prisma.creditBalance.upsert({
     where: { userId },
     update: {},
@@ -70,17 +67,6 @@ export async function creditCredits(
   );
 }
 
-export async function creditCreditsInTransaction(
-  prisma: Prisma.TransactionClient,
-  userId: string,
-  amount: number,
-  type: CreditTxnType,
-  referenceId?: string,
-  description?: string,
-): Promise<CreditTransaction> {
-  return creditCreditsInternal(prisma, userId, amount, type, referenceId, description);
-}
-
 /**
  * Refund credits for a failed generation.
  */
@@ -120,29 +106,6 @@ export async function getTransactions(
   ]);
 
   return { transactions, total };
-}
-
-/**
- * Grant signup bonus credits (idempotent — only grants once).
- */
-export async function grantSignupBonus(
-  prisma: CreditDbClient,
-  userId: string,
-  bonusCredits: number,
-): Promise<void> {
-  const existing = await prisma.creditTransaction.findFirst({
-    where: { userId, type: "SIGNUP_BONUS" },
-  });
-  if (existing) return; // Already granted
-
-  await creditCreditsInternal(
-    prisma,
-    userId,
-    bonusCredits,
-    "SIGNUP_BONUS",
-    undefined,
-    "Welcome bonus credits",
-  );
 }
 
 async function debitCreditsInternal(
