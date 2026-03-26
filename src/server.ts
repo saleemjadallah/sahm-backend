@@ -22,6 +22,7 @@ import { categoryRoutes } from "./routes/categories/index.js";
 import { generationRoutes } from "./routes/generations/index.js";
 import { packRoutes } from "./routes/packs/index.js";
 import { creditRoutes } from "./routes/credits/index.js";
+import { paymentRoutes } from "./routes/payments/index.js";
 import { translateRoutes } from "./routes/translate/index.js";
 import { webhookRoute } from "./routes/payments/webhook.js";
 
@@ -181,6 +182,9 @@ async function buildServer() {
 
       // Credits: /api/credits/*
       await api.register(creditRoutes, { prefix: "/credits" });
+
+      // Payments: /api/payments/*
+      await api.register(paymentRoutes, { prefix: "/payments" });
 
       // Translate: /api/translate/*
       await api.register(translateRoutes, { prefix: "/translate" });

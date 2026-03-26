@@ -9,6 +9,14 @@ export const CREDIT_PACKS = {
 
 export type CreditPackKey = keyof typeof CREDIT_PACKS;
 
+export const SUBSCRIPTION_PLANS = {
+  STARTER: { label: "Starter", monthlyCredits: 20, priceAed: 2900 },
+  PRO: { label: "Pro", monthlyCredits: 100, priceAed: 7900 },
+  UNLIMITED: { label: "Unlimited", monthlyCredits: 999999, priceAed: 19900 },
+} as const;
+
+export type SubscriptionPlanKey = keyof typeof SUBSCRIPTION_PLANS;
+
 // ─── Generation Costs ────────────────────────────────────
 
 export const GENERATION_COSTS = {
@@ -20,10 +28,10 @@ export const GENERATION_COSTS = {
 // ─── Subscription Credits ────────────────────────────────
 
 export const SUBSCRIPTION_CREDITS = {
-  FREE: 3,          // signup bonus (one-time)
-  STARTER: 20,      // per month
-  PRO: 100,         // per month
-  UNLIMITED: 999999, // effectively unlimited
+  FREE: 0,
+  STARTER: SUBSCRIPTION_PLANS.STARTER.monthlyCredits,
+  PRO: SUBSCRIPTION_PLANS.PRO.monthlyCredits,
+  UNLIMITED: SUBSCRIPTION_PLANS.UNLIMITED.monthlyCredits,
 } as const;
 
 // ─── Supported Languages ─────────────────────────────────

@@ -160,11 +160,18 @@ export interface CreditTransactionResponse {
 
 export interface CreditPurchaseRequest {
   packSize: "PACK_10" | "PACK_50" | "PACK_100" | "PACK_500";
+  returnPath?: string;
 }
 
 export interface CheckoutResponse {
   sessionId: string;
   url: string;
+  mode?: "checkout" | "subscription_checkout" | "billing_portal";
+}
+
+export interface SubscriptionCheckoutRequest {
+  plan: "STARTER" | "PRO" | "UNLIMITED";
+  returnPath?: string;
 }
 
 // ─── Translation ──────────────────────────────────────

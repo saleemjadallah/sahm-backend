@@ -44,6 +44,9 @@ export const env = cleanEnv(process.env, {
   STRIPE_SECRET_KEY: str({ default: "" }),
   STRIPE_PUBLISHABLE_KEY: str({ default: "" }),
   STRIPE_WEBHOOK_SECRET: str({ default: "" }),
+  STRIPE_SUB_STARTER_PRICE_ID: str({ default: "" }),
+  STRIPE_SUB_PRO_PRICE_ID: str({ default: "" }),
+  STRIPE_SUB_UNLIMITED_PRICE_ID: str({ default: "" }),
 
   // Resend
   RESEND_API_KEY: str({ default: "" }),

@@ -157,6 +157,20 @@ async function creditCreditsInternal(
   referenceId?: string,
   description?: string,
 ): Promise<CreditTransaction> {
+  if (referenceId && (type === "PURCHASE" || type === "SUBSCRIPTION")) {
+    const existingTxn = await prisma.creditTransaction.findFirst({
+      where: {
+        userId,
+        type,
+        stripePaymentId: referenceId,
+      },
+    });
+
+    if (existingTxn) {
+      return existingTxn;
+    }
+  }
+
   const existing = await prisma.creditBalance.findUnique({ where: { userId } });
   const oldBalance = existing?.balance ?? 0;
   const newBalance = oldBalance + amount;
@@ -181,7 +195,8 @@ async function creditCreditsInternal(
       type,
       amount,
       balance: newBalance,
-      stripePaymentId: type === "PURCHASE" ? referenceId : undefined,
+      stripePaymentId:
+        type === "PURCHASE" || type === "SUBSCRIPTION" ? referenceId : undefined,
       description: description || `Added ${amount} credit(s)`,
     },
   });
