@@ -5,7 +5,8 @@ import {
   regenerateGeneration,
   unlockGenerationExport,
 } from "../../services/generation.service.js";
-import { NotFoundError } from "../../errors/index.js";
+import { ForbiddenError, NotFoundError } from "../../errors/index.js";
+import { buildDesignKey, getFile } from "../../lib/storage/r2-client.js";
 import type { GenerateRequest, RegenerateRequest, GenerationResponse } from "../../types/index.js";
 
 function toResponse(g: {
@@ -96,6 +97,37 @@ export async function generationRoutes(fastify: FastifyInstance) {
       });
       if (!generation) throw new NotFoundError("Generation");
       return reply.send({ success: true, data: toResponse(generation) });
+    },
+  );
+
+  // GET /api/generations/:id/asset?variant=preview|full — stream the stored image
+  fastify.get<{ Params: { id: string }; Querystring: { variant?: "preview" | "full" } }>(
+    "/:id/asset",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const generation = await fastify.prisma.generation.findFirst({
+        where: { id: request.params.id, userId: request.userId! },
+        select: {
+          id: true,
+          isDownloaded: true,
+          status: true,
+        },
+      });
+
+      if (!generation) throw new NotFoundError("Generation");
+
+      const variant = request.query.variant === "full" ? "full" : "preview";
+      if (variant === "full" && !generation.isDownloaded) {
+        throw new ForbiddenError("Export is locked");
+      }
+
+      const key = buildDesignKey(`gen/${request.userId!}`, generation.id, variant);
+      const file = await getFile(key);
+
+      return reply
+        .header("Cache-Control", "private, max-age=300")
+        .type(file.contentType || "image/webp")
+        .send(file.buffer);
     },
   );
 

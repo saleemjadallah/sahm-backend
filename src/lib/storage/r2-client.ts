@@ -80,6 +80,38 @@ export async function getSignedUrl(
 }
 
 /**
+ * Read a file from R2 and return its bytes plus metadata.
+ */
+export async function getFile(
+  key: string,
+): Promise<{ buffer: Buffer; contentType: string | null }> {
+  try {
+    const result = await getS3().send(
+      new GetObjectCommand({
+        Bucket: env.R2_BUCKET,
+        Key: key,
+      }),
+    );
+
+    if (!result.Body || typeof result.Body.transformToByteArray !== "function") {
+      throw new StorageError(`R2 object body missing for: ${key}`);
+    }
+
+    const bytes = await result.Body.transformToByteArray();
+    return {
+      buffer: Buffer.from(bytes),
+      contentType: result.ContentType ?? null,
+    };
+  } catch (err) {
+    if (err instanceof StorageError) throw err;
+    throw new StorageError(
+      `Failed to read file: ${key}`,
+      { originalError: err instanceof Error ? err.message : String(err) },
+    );
+  }
+}
+
+/**
  * Delete a file from R2.
  */
 export async function deleteFile(key: string): Promise<void> {
