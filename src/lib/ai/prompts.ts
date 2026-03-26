@@ -213,7 +213,9 @@ export function buildGenerationPrompt(
   parts.push(`Output aspect ratio: ${aspectRatio}`);
   if (aspectRatio === "A4" || aspectRatio === "A5") {
     parts.push(
-      `Compose with the visual rhythm and page structure of an ${aspectRatio} print layout. Keep margins, spacing, hierarchy, and safe text zones appropriate for a printable portrait page even if the renderer uses the nearest supported portrait ratio internally.`,
+      userPrompt
+        ? `Compose with the proportions of an ${aspectRatio} print layout in portrait orientation.`
+        : `Compose with the visual rhythm and page structure of an ${aspectRatio} print layout. Keep margins, spacing, hierarchy, and safe text zones appropriate for a printable portrait page even if the renderer uses the nearest supported portrait ratio internally.`,
     );
   }
 
@@ -221,7 +223,9 @@ export function buildGenerationPrompt(
 
   if (directDeliverable) {
     parts.push(
-      "Render the final design asset itself in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, tabletop shot, wall frame, hand-held card, or lifestyle environment unless the user explicitly asks for a mockup. Show the full deliverable surface with clean edges, production-ready layout, and legible content.",
+      userPrompt
+        ? "Render the final design asset in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, or lifestyle environment."
+        : "Render the final design asset itself in a straight-on, front-facing, full-frame composition. Do not present it as a photographed mockup, desk scene, tabletop shot, wall frame, hand-held card, or lifestyle environment unless the user explicitly asks for a mockup. Show the full deliverable surface with clean edges, production-ready layout, and legible content.",
     );
   }
 
@@ -285,8 +289,8 @@ export function buildGenerationPrompt(
     );
   }
 
-  // 7. Output format intent
-  if (options?.outputFormatLabel) {
+  // 7. Output format intent — skip text-heavy hints when user drives the design
+  if (!userPrompt && options?.outputFormatLabel) {
     const formatSummary = options.outputFormatDescription
       ? `${options.outputFormatLabel} — ${options.outputFormatDescription}`
       : options.outputFormatLabel;
@@ -297,20 +301,20 @@ export function buildGenerationPrompt(
     parts.push(`Target resolution: ${options.outputResolution}`);
   }
 
-  if (options?.outputFormatPromptHint) {
+  if (!userPrompt && options?.outputFormatPromptHint) {
     parts.push(`Format guidance: ${options.outputFormatPromptHint}`);
   }
 
-  // 8. Output guidance
-  if (activeOutputGuidance) {
+  // 8. Output guidance — skip when user provides their own direction
+  if (!userPrompt && activeOutputGuidance) {
     const filledGuidance = metadata
       ? fillTemplate(activeOutputGuidance, metadata)
       : activeOutputGuidance;
     parts.push(filledGuidance);
   }
 
-  // 9. Quality guidance (positive framing)
-  if (activeNegativeGuidance) {
+  // 9. Quality guidance — skip when user provides their own direction
+  if (!userPrompt && activeNegativeGuidance) {
     parts.push(`Quality guidance: ${activeNegativeGuidance}`);
   }
 
