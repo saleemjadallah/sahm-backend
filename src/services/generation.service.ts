@@ -93,6 +93,7 @@ export async function generateSingle(
       outputFormatDescription: selectedOutputFormat?.description,
       outputFormatPromptHint: selectedOutputFormat?.promptHint,
       outputResolution: resolvedResolution,
+      supportsTextOverlay: outputSpecs?.supportsTextOverlay,
     },
   );
 
@@ -217,6 +218,7 @@ export async function generatePack(
       categoryId: category.id,
       subcategoryId: heroSubcat?.id,
       outputResolution: outputSpecs?.defaultResolution,
+      supportsTextOverlay: outputSpecs?.supportsTextOverlay,
     },
   );
 
@@ -268,6 +270,7 @@ export async function generatePack(
           subcategoryId: subcat?.id,
           promptVariant: heroPrompt.variantId,
           outputResolution: outputSpecs?.defaultResolution,
+          supportsTextOverlay: outputSpecs?.supportsTextOverlay,
         },
       );
 
@@ -360,6 +363,7 @@ export async function regenerateGeneration(
       subcategoryId: subcategory?.id,
       outputFormatId: undefined,
       outputResolution: outputSpecs?.defaultResolution,
+      supportsTextOverlay: outputSpecs?.supportsTextOverlay,
     },
   );
 

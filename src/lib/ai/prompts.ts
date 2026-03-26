@@ -21,6 +21,7 @@ export interface PromptOptions {
   outputFormatDescription?: string;
   outputFormatPromptHint?: string;
   outputResolution?: string;
+  supportsTextOverlay?: boolean;
 }
 
 const DIRECT_DELIVERABLE_CATEGORIES = new Set([
@@ -214,6 +215,8 @@ export function buildGenerationPrompt(
     || fashionEditorialOutput
     || portraitOutput
     || travelSceneOutput;
+  const textOverlayDesignOutput =
+    Boolean(options?.supportsTextOverlay) && !restrainedPhotographyOutput;
   const borderlessSubcategory =
     options?.subcategoryId && BORDERLESS_SUBCATEGORIES.has(options.subcategoryId);
   const styleSystemPrompt = restrainedPhotographyOutput
@@ -308,6 +311,12 @@ export function buildGenerationPrompt(
   if (options?.subcategoryId && BORDERLESS_SUBCATEGORIES.has(options.subcategoryId)) {
     parts.push(
       "IMPORTANT: The design must fill the entire canvas edge-to-edge. Do not add decorative borders, frames, margin strips, or background padding around the artwork. The imagery, patterns, and colors should extend to all four edges with no visible border or background gap. Treat the full output area as the live design surface.",
+    );
+  }
+
+  if (textOverlayDesignOutput) {
+    parts.push(
+      "Visible text is opt-in only. Render only text that is explicitly supplied in the prompt or metadata. Do not invent placeholder names, titles, taglines, body copy, menu items, dates, venues, contact details, captions, signature lines, or labels.",
     );
   }
 
