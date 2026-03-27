@@ -16,6 +16,7 @@ function toResponse(g: {
   userPrompt: string | null;
   style: string | null;
   aspectRatio: string;
+  referenceAssetId: string | null;
   previewUrl: string | null;
   fullUrl: string | null;
   status: string;
@@ -31,6 +32,7 @@ function toResponse(g: {
     userPrompt: g.userPrompt,
     style: g.style,
     aspectRatio: g.aspectRatio,
+    referenceAssetId: g.referenceAssetId,
     previewUrl: g.previewUrl,
     fullUrl: g.isDownloaded ? g.fullUrl : null,
     status: g.status as GenerationResponse["status"],

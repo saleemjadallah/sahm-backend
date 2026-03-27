@@ -2,7 +2,9 @@ import type { PrismaClient, Generation } from "@prisma/client";
 import { generateDesignImage, type GenerateImageOpts } from "../lib/ai/gemini.js";
 import { buildGenerationPrompt } from "../lib/ai/prompts.js";
 import { getCategory } from "../lib/categories/index.js";
+import { buildReferencePromptInstruction } from "../lib/reference-images/config.js";
 import { processGeneratedImage } from "./image.service.js";
+import { loadReferenceAssetBuffer } from "./reference-image.service.js";
 import { debitCreditsInTransaction } from "./credit.service.js";
 import { NotFoundError, GeminiError, ValidationError } from "../errors/index.js";
 import type {
@@ -30,6 +32,7 @@ export async function generateSingle(
     style,
     aspectRatio,
     outputFormatId,
+    referenceAssetId,
     metadata,
     promptVariant,
   } = req;
@@ -55,6 +58,16 @@ export async function generateSingle(
     || "1:1";
   const resolvedResolution =
     selectedOutputFormat?.resolution || outputSpecs?.defaultResolution || "2k";
+  let referenceImageBuffer: Buffer | undefined;
+
+  if (referenceAssetId) {
+    const referenceAsset = await loadReferenceAssetBuffer(prisma, userId, referenceAssetId, categoryId);
+    referenceImageBuffer = referenceAsset.buffer;
+  }
+
+  const referencePromptInstruction = referenceAssetId
+    ? `\n\n${buildReferencePromptInstruction(categoryId) ?? ""}`.trimEnd()
+    : "";
 
   // Determine the cost to unlock download/share/export after generation completes.
   const creditsCost =
@@ -71,6 +84,7 @@ export async function generateSingle(
       style: resolvedStyle,
       aspectRatio: resolvedAspect,
       metadata: metadata as object,
+      referenceAssetId,
       status: "GENERATING",
       creditsCost,
     },
@@ -96,14 +110,15 @@ export async function generateSingle(
       supportsTextOverlay: outputSpecs?.supportsTextOverlay,
     },
   );
+  const finalContentPrompt = `${prompt.contentPrompt}${referencePromptInstruction}`;
 
   // Update record with resolved prompt (include variant ID for tracking)
   await prisma.generation.update({
     where: { id: generation.id },
     data: {
       resolvedPrompt: prompt.variantId
-        ? `[variant:${prompt.variantId}] ${prompt.contentPrompt}`
-        : prompt.contentPrompt,
+        ? `[variant:${prompt.variantId}] ${finalContentPrompt}`
+        : finalContentPrompt,
     },
   });
 
@@ -112,9 +127,10 @@ export async function generateSingle(
   try {
     const imageBuffer = await withTimeout(
       generateDesignImage({
-        prompt: prompt.contentPrompt,
+        prompt: finalContentPrompt,
         systemPrompt: prompt.systemPrompt,
         aspectRatio: resolvedAspect,
+        referenceImage: referenceImageBuffer,
       }),
       GEMINI_TIMEOUT_MS,
       `Gemini generation timed out for ${generation.id}`,
@@ -366,13 +382,29 @@ export async function regenerateGeneration(
       supportsTextOverlay: outputSpecs?.supportsTextOverlay,
     },
   );
+  let referenceImageBuffer: Buffer | undefined;
+  const referencePromptInstruction = generation.referenceAssetId
+    ? `\n\n${buildReferencePromptInstruction(generation.categoryId) ?? ""}`.trimEnd()
+    : "";
+
+  if (generation.referenceAssetId) {
+    const referenceAsset = await loadReferenceAssetBuffer(
+      prisma,
+      userId,
+      generation.referenceAssetId,
+      generation.categoryId,
+    );
+    referenceImageBuffer = referenceAsset.buffer;
+  }
+  const finalContentPrompt = `${prompt.contentPrompt}${referencePromptInstruction}`;
 
   try {
     const imageBuffer = await withTimeout(
       generateDesignImage({
-        prompt: prompt.contentPrompt,
+        prompt: finalContentPrompt,
         systemPrompt: prompt.systemPrompt,
         aspectRatio: generation.aspectRatio,
+        referenceImage: referenceImageBuffer,
       }),
       GEMINI_TIMEOUT_MS,
       `Regeneration timed out for ${generationId}`,
@@ -391,7 +423,7 @@ export async function regenerateGeneration(
         fullUrl,
         status: "COMPLETED",
         isDownloaded: false,
-        resolvedPrompt: prompt.contentPrompt,
+        resolvedPrompt: finalContentPrompt,
         style: resolvedStyle,
         userPrompt: newPrompt ?? generation.userPrompt,
       },

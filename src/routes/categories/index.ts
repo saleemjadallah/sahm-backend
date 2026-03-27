@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getAllCategories, getCategory } from "../../lib/categories/index.js";
+import { getReferenceImageConfig } from "../../lib/reference-images/config.js";
 import { NotFoundError } from "../../errors/index.js";
 import type {
   CategoryResponse,
@@ -19,6 +20,9 @@ export async function categoryRoutes(fastify: FastifyInstance) {
       iconUrl: c.iconUrl,
       sortOrder: c.sortOrder,
       outputSpecs: c.outputSpecs as CategoryOutputSpecsResponse | null,
+      referenceImage: getReferenceImageConfig(c.id)
+        ? { ...getReferenceImageConfig(c.id)!, maxCount: 1 as const }
+        : null,
       styleOptions: c.styleOptions as string[] | null,
       subcategories: c.subcategories.map(
         (s): SubcategoryResponse => ({
@@ -45,6 +49,9 @@ export async function categoryRoutes(fastify: FastifyInstance) {
       iconUrl: category.iconUrl,
       sortOrder: category.sortOrder,
       outputSpecs: category.outputSpecs as CategoryOutputSpecsResponse | null,
+      referenceImage: getReferenceImageConfig(category.id)
+        ? { ...getReferenceImageConfig(category.id)!, maxCount: 1 as const }
+        : null,
       styleOptions: category.styleOptions as string[] | null,
       subcategories: category.subcategories.map(
         (s): SubcategoryResponse => ({

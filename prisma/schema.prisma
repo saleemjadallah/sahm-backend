@@ -27,6 +27,7 @@ model User {
   updatedAt      DateTime      @updatedAt
 
   generations         Generation[]
+  referenceAssets     ReferenceAsset[]
   packs               Pack[]
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
@@ -95,6 +96,8 @@ model Generation {
   style           String?          // style key from STYLE_GUIDES
   aspectRatio     String           @default("1:1")
   metadata        Json?            // category-specific input fields
+  referenceAssetId String?
+  referenceAsset   ReferenceAsset? @relation(fields: [referenceAssetId], references: [id], onDelete: SetNull)
 
   // AI output
   resolvedPrompt  String?          // the full prompt sent to Gemini
@@ -118,6 +121,7 @@ model Generation {
   @@index([subcategoryId])
   @@index([status])
   @@index([packId])
+  @@index([referenceAssetId])
 }
 
 enum GenerationStatus {
@@ -125,6 +129,25 @@ enum GenerationStatus {
   GENERATING
   COMPLETED
   FAILED
+}
+
+model ReferenceAsset {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId       String
+  originalFilename String?
+  storageKey       String
+  mimeType         String
+  fileSize         Int
+  width            Int?
+  height           Int?
+  createdAt        DateTime     @default(now())
+
+  generations      Generation[]
+
+  @@index([userId])
+  @@index([categoryId])
 }
 
 // ─── Packs (optional multi-image bundles) ─────────────

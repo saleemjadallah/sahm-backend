@@ -21,6 +21,7 @@ import { authRoutes } from "./routes/auth/index.js";
 import { categoryRoutes } from "./routes/categories/index.js";
 import { generationRoutes } from "./routes/generations/index.js";
 import { packRoutes } from "./routes/packs/index.js";
+import { referenceAssetRoutes } from "./routes/reference-assets/index.js";
 import { creditRoutes } from "./routes/credits/index.js";
 import { paymentRoutes } from "./routes/payments/index.js";
 import { translateRoutes } from "./routes/translate/index.js";
@@ -171,7 +172,25 @@ async function buildServer() {
           gen.post("/", { preHandler: [(await import("./middleware/requireAuth.js")).requireAuth] }, async (request, reply) => {
             const { generateSingle } = await import("./services/generation.service.js");
             const generation = await generateSingle(gen.prisma, request.userId!, request.body as Parameters<typeof generateSingle>[2]);
-            return reply.code(201).send({ success: true, data: generation });
+            return reply.code(201).send({
+              success: true,
+              data: {
+                id: generation.id,
+                categoryId: generation.categoryId,
+                subcategoryId: generation.subcategoryId,
+                userPrompt: generation.userPrompt,
+                style: generation.style,
+                aspectRatio: generation.aspectRatio,
+                referenceAssetId: generation.referenceAssetId,
+                previewUrl: generation.previewUrl,
+                fullUrl: generation.isDownloaded ? generation.fullUrl : null,
+                status: generation.status,
+                creditsCost: generation.creditsCost,
+                packId: generation.packId,
+                isDownloaded: generation.isDownloaded,
+                createdAt: generation.createdAt.toISOString(),
+              },
+            });
           });
         },
         { prefix: "/generate" },
@@ -179,6 +198,9 @@ async function buildServer() {
 
       // Packs: /api/packs/*
       await api.register(packRoutes, { prefix: "/packs" });
+
+      // Reference assets: /api/reference-assets/*
+      await api.register(referenceAssetRoutes, { prefix: "/reference-assets" });
 
       // Credits: /api/credits/*
       await api.register(creditRoutes, { prefix: "/credits" });

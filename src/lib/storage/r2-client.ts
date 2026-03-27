@@ -141,3 +141,14 @@ export function buildDesignKey(
 ): string {
   return `designs/${projectId}/${designId}/${variant}.${ext}`;
 }
+
+/**
+ * Build a storage key for a user-uploaded reference image.
+ */
+export function buildReferenceAssetKey(
+  userId: string,
+  assetId: string,
+  ext = "png",
+): string {
+  return `reference-assets/${userId}/${assetId}/source.${ext}`;
+}

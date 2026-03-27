@@ -54,6 +54,7 @@ export interface CategoryResponse {
   iconUrl: string | null;
   sortOrder: number;
   outputSpecs: CategoryOutputSpecsResponse | null;
+  referenceImage: ReferenceImageConfigResponse | null;
   styleOptions: string[] | null;
   subcategories: SubcategoryResponse[];
 }
@@ -84,6 +85,13 @@ export interface CategoryOutputSpecsResponse {
   formats: CategoryOutputFormatResponse[];
 }
 
+export interface ReferenceImageConfigResponse {
+  mode: "identity" | "subject" | "scene";
+  label: string;
+  hint: string;
+  maxCount: 1;
+}
+
 // ─── Generation ───────────────────────────────────────
 
 export interface GenerateRequest {
@@ -93,6 +101,7 @@ export interface GenerateRequest {
   style?: string;
   aspectRatio?: string;
   outputFormatId?: string;
+  referenceAssetId?: string;
   metadata?: Record<string, unknown>;
   promptVariant?: string;
 }
@@ -104,6 +113,7 @@ export interface GenerationResponse {
   userPrompt: string | null;
   style: string | null;
   aspectRatio: string;
+  referenceAssetId: string | null;
   previewUrl: string | null;
   fullUrl: string | null;
   status: GenerationStatus;
@@ -117,6 +127,17 @@ export interface RegenerateRequest {
   style?: string;
   userPrompt?: string;
   promptVariant?: string;
+}
+
+export interface ReferenceAssetResponse {
+  id: string;
+  categoryId: string;
+  originalFilename: string | null;
+  mimeType: string;
+  fileSize: number;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
 }
 
 // ─── Pack ─────────────────────────────────────────────
