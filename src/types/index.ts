@@ -121,6 +121,7 @@ export interface GenerationResponse {
   packId: string | null;
   isDownloaded: boolean;
   createdAt: string;
+  guestAccessToken?: string | null;
 }
 
 export interface RegenerateRequest {

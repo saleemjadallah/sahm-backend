@@ -169,9 +169,15 @@ async function buildServer() {
       // The main generate endpoint also at /api/generate for convenience
       await api.register(
         async function (gen) {
-          gen.post("/", { preHandler: [(await import("./middleware/requireAuth.js")).requireAuth] }, async (request, reply) => {
+          gen.post("/", async (request, reply) => {
             const { generateSingle } = await import("./services/generation.service.js");
-            const generation = await generateSingle(gen.prisma, request.userId!, request.body as Parameters<typeof generateSingle>[2]);
+            const { createGuestGenerationToken } = await import("./lib/auth/guest-generation-token.js");
+            const viewerUserId = request.user?.id ?? null;
+            const generation = await generateSingle(
+              gen.prisma,
+              viewerUserId,
+              request.body as Parameters<typeof generateSingle>[2],
+            );
             return reply.code(201).send({
               success: true,
               data: {
@@ -189,6 +195,7 @@ async function buildServer() {
                 packId: generation.packId,
                 isDownloaded: generation.isDownloaded,
                 createdAt: generation.createdAt.toISOString(),
+                guestAccessToken: viewerUserId ? null : createGuestGenerationToken(generation.id),
               },
             });
           });

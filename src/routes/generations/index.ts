@@ -4,10 +4,15 @@ import {
   generateSingle,
   regenerateGeneration,
   unlockGenerationExport,
+  getGenerationStoragePrefix,
 } from "../../services/generation.service.js";
-import { ForbiddenError, NotFoundError } from "../../errors/index.js";
+import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../errors/index.js";
 import { buildDesignKey, getFile, deleteFile } from "../../lib/storage/r2-client.js";
 import type { GenerateRequest, RegenerateRequest, GenerationResponse } from "../../types/index.js";
+import {
+  createGuestGenerationToken,
+  verifyGuestGenerationToken,
+} from "../../lib/auth/guest-generation-token.js";
 
 function toResponse(g: {
   id: string;
@@ -24,7 +29,7 @@ function toResponse(g: {
   packId: string | null;
   isDownloaded: boolean;
   createdAt: Date;
-}): GenerationResponse {
+}, guestAccessToken?: string | null): GenerationResponse {
   return {
     id: g.id,
     categoryId: g.categoryId,
@@ -40,6 +45,7 @@ function toResponse(g: {
     packId: g.packId,
     isDownloaded: g.isDownloaded,
     createdAt: g.createdAt.toISOString(),
+    guestAccessToken: guestAccessToken ?? null,
   };
 }
 
@@ -47,11 +53,16 @@ export async function generationRoutes(fastify: FastifyInstance) {
   // POST /api/generate — generate a single image
   fastify.post<{ Body: GenerateRequest }>(
     "/generate",
-    { preHandler: [requireAuth] },
     async (request, reply) => {
-      const userId = request.userId!;
+      const userId = request.user?.id ?? null;
       const generation = await generateSingle(fastify.prisma, userId, request.body);
-      return reply.code(201).send({ success: true, data: toResponse(generation) });
+      return reply.code(201).send({
+        success: true,
+        data: toResponse(
+          generation,
+          userId ? null : createGuestGenerationToken(generation.id),
+        ),
+      });
     },
   );
 
@@ -78,7 +89,7 @@ export async function generationRoutes(fastify: FastifyInstance) {
 
       return reply.send({
         success: true,
-        data: generations.map(toResponse),
+        data: generations.map((generation) => toResponse(generation)),
         pagination: {
           page,
           limit,
@@ -90,12 +101,22 @@ export async function generationRoutes(fastify: FastifyInstance) {
   );
 
   // GET /api/generations/:id — get single generation
-  fastify.get<{ Params: { id: string } }>(
+  fastify.get<{ Params: { id: string }; Querystring: { guestAccessToken?: string } }>(
     "/:id",
-    { preHandler: [requireAuth] },
     async (request, reply) => {
+      const viewerUserId = request.user?.id ?? null;
+      const hasGuestAccess = !viewerUserId
+        && Boolean(request.query.guestAccessToken)
+        && verifyGuestGenerationToken(request.query.guestAccessToken!, request.params.id);
+
+      if (!viewerUserId && !hasGuestAccess) {
+        throw new UnauthorizedError("Authentication required");
+      }
+
       const generation = await fastify.prisma.generation.findFirst({
-        where: { id: request.params.id, userId: request.userId! },
+        where: viewerUserId
+          ? { id: request.params.id, userId: viewerUserId }
+          : { id: request.params.id, userId: null },
       });
       if (!generation) throw new NotFoundError("Generation");
       return reply.send({ success: true, data: toResponse(generation) });
@@ -113,6 +134,8 @@ export async function generationRoutes(fastify: FastifyInstance) {
           id: true,
           isDownloaded: true,
           status: true,
+          userId: true,
+          storageKeyPrefix: true,
         },
       });
 
@@ -123,7 +146,7 @@ export async function generationRoutes(fastify: FastifyInstance) {
         throw new ForbiddenError("Export is locked");
       }
 
-      const key = buildDesignKey(`gen/${request.userId!}`, generation.id, variant);
+      const key = buildDesignKey(getGenerationStoragePrefix(generation), generation.id, variant);
       const file = await getFile(key);
 
       return reply
@@ -159,6 +182,11 @@ export async function generationRoutes(fastify: FastifyInstance) {
       const userId = request.userId!;
       const generation = await fastify.prisma.generation.findFirst({
         where: { id: request.params.id, userId },
+        select: {
+          id: true,
+          userId: true,
+          storageKeyPrefix: true,
+        },
       });
       if (!generation) throw new NotFoundError("Generation");
 
@@ -166,7 +194,7 @@ export async function generationRoutes(fastify: FastifyInstance) {
       const variants = ["preview", "full"] as const;
       await Promise.allSettled(
         variants.map((v) =>
-          deleteFile(buildDesignKey(`gen/${userId}`, generation.id, v)),
+          deleteFile(buildDesignKey(getGenerationStoragePrefix(generation), generation.id, v)),
         ),
       );
 
@@ -186,6 +214,35 @@ export async function generationRoutes(fastify: FastifyInstance) {
         request.userId!,
         request.params.id,
       );
+      return reply.send({ success: true, data: toResponse(generation) });
+    },
+  );
+
+  fastify.post<{ Params: { id: string }; Body: { guestAccessToken?: string } }>(
+    "/:id/claim",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { guestAccessToken } = request.body || {};
+
+      if (!guestAccessToken || !verifyGuestGenerationToken(guestAccessToken, request.params.id)) {
+        throw new UnauthorizedError("Valid guest access is required");
+      }
+
+      const generation = await fastify.prisma.$transaction(async (tx) => {
+        const current = await tx.generation.findUnique({
+          where: { id: request.params.id },
+        });
+
+        if (!current) throw new NotFoundError("Generation");
+        if (current.userId === request.userId!) return current;
+        if (current.userId) throw new NotFoundError("Generation");
+
+        return tx.generation.update({
+          where: { id: current.id },
+          data: { userId: request.userId! },
+        });
+      });
+
       return reply.send({ success: true, data: toResponse(generation) });
     },
   );

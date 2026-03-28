@@ -16,13 +16,22 @@ import type { GenerateRequest, CreatePackRequest } from "../types/index.js";
 
 const GEMINI_TIMEOUT_MS = 180_000;
 const STORAGE_TIMEOUT_MS = 60_000;
+export const GENERATION_STORAGE_PREFIX_V2 = "gen/v2";
+
+export function getGenerationStoragePrefix(generation: {
+  storageKeyPrefix: string | null;
+  userId: string | null;
+}): string {
+  return generation.storageKeyPrefix
+    ?? (generation.userId ? `gen/${generation.userId}` : GENERATION_STORAGE_PREFIX_V2);
+}
 
 /**
  * Generate a single image. The main entry point.
  */
 export async function generateSingle(
   prisma: PrismaClient,
-  userId: string,
+  userId: string | null,
   req: GenerateRequest,
 ): Promise<Generation> {
   const {
@@ -61,6 +70,9 @@ export async function generateSingle(
   let referenceImageBuffer: Buffer | undefined;
 
   if (referenceAssetId) {
+    if (!userId) {
+      throw new ValidationError("Sign in to use a reference image");
+    }
     const referenceAsset = await loadReferenceAssetBuffer(prisma, userId, referenceAssetId, categoryId);
     referenceImageBuffer = referenceAsset.buffer;
   }
@@ -87,6 +99,7 @@ export async function generateSingle(
       referenceAssetId,
       status: "GENERATING",
       creditsCost,
+      storageKeyPrefix: GENERATION_STORAGE_PREFIX_V2,
     },
   });
 
@@ -137,7 +150,11 @@ export async function generateSingle(
     );
 
     const { previewUrl, fullUrl } = await withTimeout(
-      processGeneratedImage(imageBuffer, generation.id, `gen/${userId}`),
+      processGeneratedImage(
+        imageBuffer,
+        generation.id,
+        getGenerationStoragePrefix(generation),
+      ),
       STORAGE_TIMEOUT_MS,
       `Image upload timed out for ${generation.id}`,
     );
@@ -213,6 +230,7 @@ export async function generatePack(
         creditsCost: 1,
         packId: pack.id,
         packRole: i === 0 ? "hero" : `companion-${i}`,
+        storageKeyPrefix: GENERATION_STORAGE_PREFIX_V2,
       },
     });
     generations.push(gen);
@@ -254,7 +272,11 @@ export async function generatePack(
     );
 
     const { previewUrl, fullUrl } = await withTimeout(
-      processGeneratedImage(heroBuffer, heroGen.id, `gen/${userId}`),
+      processGeneratedImage(
+        heroBuffer,
+        heroGen.id,
+        getGenerationStoragePrefix(heroGen),
+      ),
       STORAGE_TIMEOUT_MS,
       `Hero upload timed out`,
     );
@@ -311,7 +333,11 @@ export async function generatePack(
         );
 
         const { previewUrl, fullUrl } = await withTimeout(
-          processGeneratedImage(imageBuffer, gen.id, `gen/${userId}`),
+          processGeneratedImage(
+            imageBuffer,
+            gen.id,
+            getGenerationStoragePrefix(gen),
+          ),
           STORAGE_TIMEOUT_MS,
           `Pack item ${idx + 1} upload timed out`,
         );
@@ -411,7 +437,11 @@ export async function regenerateGeneration(
     );
 
     const { previewUrl, fullUrl } = await withTimeout(
-      processGeneratedImage(imageBuffer, generationId, `gen/${userId}`),
+      processGeneratedImage(
+        imageBuffer,
+        generationId,
+        getGenerationStoragePrefix(generation),
+      ),
       STORAGE_TIMEOUT_MS,
       `Upload timed out for ${generationId}`,
     );
