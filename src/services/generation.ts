@@ -189,8 +189,20 @@ async function renderPortraitAssets(source: Buffer) {
     .png()
     .toBuffer();
 
-  const preview = await sharp(full)
+  const previewBase = await sharp(full)
     .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
+
+  const previewWatermark = `
+    <svg width="1200" height="1200" viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="1020" width="1200" height="180" fill="rgba(61,61,61,0.46)"/>
+      <text x="600" y="1110" text-anchor="middle" font-size="54" font-family="Arial, sans-serif" fill="rgba(255,255,255,0.96)">Preview • Unlock high-resolution download</text>
+    </svg>
+  `;
+
+  const preview = await sharp(previewBase)
+    .composite([{ input: Buffer.from(previewWatermark) }])
     .png()
     .toBuffer();
 
@@ -390,41 +402,83 @@ export async function startOrderGeneration(orderId: string) {
     (portrait) => portrait.status === PortraitStatus.COMPLETED,
   ).length;
 
-  await prisma.order.update({
+  const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data: {
       status: completedCount > 0 ? OrderStatus.COMPLETED : OrderStatus.FAILED,
+    },
+    include: {
+      user: true,
+      portraits: true,
     },
   });
 
   await applyRefund(orderId);
 
-  if (completedCount > 0) {
-    await sendPortraitsReadyEmail(refreshed.user, refreshed, refreshed.portraits);
-    if (refreshed.isGift && refreshed.giftToken) {
-      await sendGiftNotificationEmail(refreshed, refreshed.user.name ?? refreshed.user.email, refreshed.portraits);
-      await sendGiftSentConfirmationEmail(refreshed.user, refreshed);
+  if (completedCount > 0 && updatedOrder.stripePaymentId) {
+    await sendPortraitsReadyEmail(updatedOrder.user, updatedOrder, updatedOrder.portraits);
+    if (updatedOrder.isGift && updatedOrder.giftToken) {
+      await sendGiftNotificationEmail(updatedOrder, updatedOrder.user.name ?? updatedOrder.user.email, updatedOrder.portraits);
+      await sendGiftSentConfirmationEmail(updatedOrder.user, updatedOrder);
     }
   }
 }
 
 export async function handlePaidOrder(orderId: string, stripePaymentId?: string | null, stripeSessionId?: string | null) {
+  const existingOrder = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: true,
+      portraits: true,
+    },
+  });
+
+  if (!existingOrder || existingOrder.stripePaymentId) {
+    return;
+  }
+
+  if (existingOrder.promoCode) {
+    await prisma.promoCode.update({
+      where: { code: existingOrder.promoCode },
+      data: {
+        usedCount: { increment: 1 },
+      },
+    });
+  }
+
+  const nextStatus =
+    existingOrder.status === OrderStatus.COMPLETED || existingOrder.status === OrderStatus.FAILED
+      ? existingOrder.status
+      : OrderStatus.PAID;
+
   const order = await prisma.order.update({
     where: { id: orderId },
     data: {
-      status: OrderStatus.PAID,
+      status: nextStatus,
       stripePaymentId: stripePaymentId ?? undefined,
       stripeSessionId: stripeSessionId ?? undefined,
     },
     include: {
       user: true,
+      portraits: true,
     },
   });
 
+  const hasFinishedPortraits = order.portraits.some((portrait) => portrait.status === PortraitStatus.COMPLETED);
+  const hasPendingGeneration = order.portraits.some(
+    (portrait) => portrait.status === PortraitStatus.PENDING || portrait.status === PortraitStatus.GENERATING,
+  );
+
+  if (hasFinishedPortraits && !hasPendingGeneration) {
+    await sendPortraitsReadyEmail(order.user, order, order.portraits);
+    if (order.isGift && order.giftToken) {
+      await sendGiftNotificationEmail(order, order.user.name ?? order.user.email, order.portraits);
+      await sendGiftSentConfirmationEmail(order.user, order);
+    }
+    return;
+  }
+
   await sendOrderConfirmationEmail(order.user, order);
-  setTimeout(() => {
-    void startOrderGeneration(orderId);
-  }, 0);
 }
 
 export function getPackagePortraitCount(packageType: PackageType) {

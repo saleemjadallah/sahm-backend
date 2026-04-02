@@ -69,6 +69,34 @@ function normalizeFilename(input: string | undefined, fallback: string) {
   return (input ?? fallback).replace(/[^a-z0-9._-]+/gi, "-").toLowerCase();
 }
 
+function orderIsPaid(order: { stripePaymentId: string | null }) {
+  return Boolean(order.stripePaymentId);
+}
+
+function serializeOrder<T extends {
+  stripePaymentId: string | null;
+  portraits: Array<{
+    id: string;
+    style: PortraitStyle;
+    status: string;
+    previewUrl: string | null;
+    fullUrl: string | null;
+    printReadyUrl: string | null;
+  }>;
+}>(order: T) {
+  const isPaid = orderIsPaid(order);
+
+  return {
+    ...order,
+    isPaid,
+    portraits: order.portraits.map((portrait) => ({
+      ...portrait,
+      fullUrl: isPaid ? portrait.fullUrl : null,
+      printReadyUrl: isPaid ? portrait.printReadyUrl : null,
+    })),
+  };
+}
+
 async function processPhotoBuffer(buffer: Buffer) {
   const metadata = await sharp(buffer).metadata();
   if (!metadata.width || !metadata.height || metadata.width < 512 || metadata.height < 512) {
@@ -328,11 +356,12 @@ export function registerRoutes(app: FastifyInstance) {
 
   app.get("/api/orders", async (request) => {
     const user = requireUser(request);
-    return prisma.order.findMany({
+    const orders = await prisma.order.findMany({
       where: { userId: user.id },
       include: orderSelect(),
       orderBy: { createdAt: "desc" },
     });
+    return orders.map((order) => serializeOrder(order));
   });
 
   app.post("/api/orders", async (request) => {
@@ -393,65 +422,13 @@ export function registerRoutes(app: FastifyInstance) {
       },
     });
 
-    let checkoutUrl: string | null = null;
-    if (stripe) {
-      const priceId = getPriceIdForPackage(body.packageType);
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        success_url: `${env.FRONTEND_URL}/order/${order.id}/processing?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${env.FRONTEND_URL}/create/checkout?order=${order.id}`,
-        customer_email: user.email,
-        metadata: {
-          orderId: order.id,
-          userId: user.id,
-        },
-        line_items: priceId
-          ? [
-              {
-                price: priceId,
-                quantity: 1,
-              },
-            ]
-          : [
-              {
-                price_data: {
-                  currency: "usd",
-                  product_data: {
-                    name: `${PACKAGE_PRICING[body.packageType].label} for ${pet.name}`,
-                    description: `${styles.length} memorial portrait${styles.length > 1 ? "s" : ""}`,
-                  },
-                  unit_amount: amount,
-                },
-                quantity: 1,
-              },
-            ],
-      });
-
-      checkoutUrl = session.url;
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          stripeSessionId: session.id,
-        },
-      });
-    }
-
-    if (!stripe && env.NODE_ENV !== "production") {
-      await handlePaidOrder(order.id, `demo_pi_${order.id}`, `demo_cs_${order.id}`);
-    }
-
-    if (promoCode) {
-      await prisma.promoCode.update({
-        where: { code: promoCode },
-        data: {
-          usedCount: { increment: 1 },
-        },
-      });
-    }
+    setTimeout(() => {
+      void import("../services/generation.js").then(({ startOrderGeneration }) => startOrderGeneration(order.id));
+    }, 0);
 
     return {
       orderId: order.id,
-      checkoutUrl,
+      checkoutUrl: null,
     };
   });
 
@@ -467,7 +444,7 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Order not found.");
     }
 
-    return order;
+    return serializeOrder(order);
   });
 
   app.post("/api/checkout/create-session", async (request) => {
@@ -481,15 +458,24 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Order not found.");
     }
 
+    if (orderIsPaid(order)) {
+      return { checkoutUrl: `${env.FRONTEND_URL}/order/${order.id}` };
+    }
+
+    if (!stripe && env.NODE_ENV !== "production") {
+      await handlePaidOrder(order.id, `demo_pi_${order.id}`, `demo_cs_${order.id}`);
+      return { checkoutUrl: `${env.FRONTEND_URL}/order/${order.id}` };
+    }
+
     if (!stripe) {
-      return { checkoutUrl: `${env.FRONTEND_URL}/order/${order.id}/processing` };
+      throw createError(503, "Payments are not configured.");
     }
 
     const priceId = getPriceIdForPackage(order.packageType);
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      success_url: `${env.FRONTEND_URL}/order/${order.id}/processing?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${env.FRONTEND_URL}/create/checkout?order=${order.id}`,
+      success_url: `${env.FRONTEND_URL}/order/${order.id}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.FRONTEND_URL}/order/${order.id}`,
       customer_email: user.email,
       metadata: {
         orderId: order.id,
@@ -577,7 +563,7 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Order not found.");
     }
 
-    return order.portraits;
+    return serializeOrder(order).portraits;
   });
 
   app.get("/api/orders/:orderId/portraits/:id/download", async (request, reply) => {
@@ -592,10 +578,21 @@ export function registerRoutes(app: FastifyInstance) {
           userId: user.id,
         },
       },
+      include: {
+        order: {
+          select: {
+            stripePaymentId: true,
+          },
+        },
+      },
     });
 
     if (!portrait) {
       throw createError(404, "Portrait not found.");
+    }
+
+    if (!portrait.order.stripePaymentId && variant !== "preview") {
+      throw createError(402, "Payment is required to download high-resolution files.");
     }
 
     const url =
@@ -622,6 +619,10 @@ export function registerRoutes(app: FastifyInstance) {
 
     if (!order) {
       throw createError(404, "Order not found.");
+    }
+
+    if (!orderIsPaid(order)) {
+      throw createError(402, "Payment is required to download the full bundle.");
     }
 
     reply.header("Content-Type", "application/zip");
@@ -663,6 +664,10 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Order not found.");
     }
 
+    if (!orderIsPaid(order)) {
+      throw createError(402, "Payment is required to download the print guide.");
+    }
+
     const pdf = createPrintGuidePdf(order.petName);
     reply.header("Content-Type", "application/pdf");
     reply.header(
@@ -675,7 +680,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.get("/api/gift/:token", async (request) => {
     const { token } = request.params as { token: string };
     const order = await prisma.order.findFirst({
-      where: { giftToken: token },
+      where: { giftToken: token, stripePaymentId: { not: null } },
       include: orderSelect(),
     });
 
@@ -690,6 +695,6 @@ export function registerRoutes(app: FastifyInstance) {
       },
     });
 
-    return order;
+    return serializeOrder(order);
   });
 }
