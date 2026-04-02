@@ -7,247 +7,159 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Users ─────────────────────────────────────────────
-
 model User {
-  id             String        @id @default(cuid())
-  clerkId        String?       @unique
-  email          String        @unique
-  name           String?
-  locale         String        @default("en") // "en", "ar", or "hi"
-  phone          String?
+  id        String   @id @default(cuid())
+  email     String   @unique
+  clerkId   String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Auth providers
-  googleId       String?       @unique
-  appleId        String?       @unique
-  magicLinkToken String?       // Hashed token for email magic link
-  magicLinkExpiry DateTime?
-
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  generations         Generation[]
-  referenceAssets     ReferenceAsset[]
-  packs               Pack[]
-  creditBalance       CreditBalance?
-  creditTransactions  CreditTransaction[]
-  subscription        Subscription?
-
-  @@index([email])
-  @@index([clerkId])
-  @@index([googleId])
-  @@index([appleId])
+  pets    Pet[]
+  orders  Order[]
 }
 
-// ─── Categories ───────────────────────────────────────
-
-model Category {
-  id          String   @id // slug: "event-stationery", "wall-art", etc.
-  label       String   // "Event Stationery"
+model Pet {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  type        PetType   @default(DOG)
+  breed       String?
   description String?
-  iconUrl     String?
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  // Category-level configuration stored as JSON
-  promptConfig    Json  // { systemPrompt, contextTemplate, outputGuidance, negativeGuidance }
-  metadataSchema  Json? // JSON Schema defining input fields for the UI
-  outputSpecs     Json? // { defaultAspectRatio, availableAspectRatios, defaultResolution, supportsTextOverlay }
-  styleOptions    Json? // array of style keys that apply to this category
+  photos  PetPhoto[]
+  orders  Order[]
 
-  subcategories   Subcategory[]
-  generations     Generation[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  @@index([userId, createdAt])
 }
 
-model Subcategory {
-  id          String   @id // slug: "wedding-invitation", "birthday-card", etc.
-  categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
-  label       String
-  description String?
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-
-  promptTemplate  String?  // subcategory-specific prompt fragment
-  defaultAspect   String   @default("1:1")
-
-  generations     Generation[]
-
-  @@index([categoryId])
+enum PetType {
+  DOG
+  CAT
+  OTHER
 }
 
-// ─── Generations ──────────────────────────────────────
+model PetPhoto {
+  id           String   @id @default(cuid())
+  petId        String
+  pet          Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  originalUrl  String
+  processedUrl String?
+  originalKey  String
+  processedKey String?
+  mimeType     String
+  width        Int?
+  height       Int?
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
-model Generation {
-  id              String           @id @default(cuid())
-  userId          String?
-  user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  categoryId      String
-  category        Category         @relation(fields: [categoryId], references: [id])
-  subcategoryId   String?
-  subcategory     Subcategory?     @relation(fields: [subcategoryId], references: [id])
-
-  // User input
-  userPrompt      String?          // user's free-text description
-  style           String?          // style key from STYLE_GUIDES
-  aspectRatio     String           @default("1:1")
-  metadata        Json?            // category-specific input fields
-  referenceAssetId String?
-  referenceAsset   ReferenceAsset? @relation(fields: [referenceAssetId], references: [id], onDelete: SetNull)
-
-  // AI output
-  resolvedPrompt  String?          // the full prompt sent to Gemini
-  previewUrl      String?          // watermarked preview
-  fullUrl         String?          // full-res (unlocked via credits)
-  status          GenerationStatus @default(PENDING)
-  storageKeyPrefix String?         // stable storage path prefix for image assets
-
-  // Credits
-  creditsCost     Int              @default(1)
-
-  // Optional pack grouping
-  packId          String?
-  pack            Pack?            @relation(fields: [packId], references: [id])
-  packRole        String?          // "hero", "companion-1", etc.
-
-  isDownloaded    Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-
-  @@index([userId])
-  @@index([categoryId])
-  @@index([subcategoryId])
-  @@index([status])
-  @@index([packId])
-  @@index([referenceAssetId])
+  @@index([petId, createdAt])
 }
 
-enum GenerationStatus {
+model Order {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  petId           String
+  pet             Pet          @relation(fields: [petId], references: [id], onDelete: Cascade)
+  packageType     PackageType
+  status          OrderStatus  @default(PENDING)
+  amount          Int
+  stripePaymentId String?
+  stripeSessionId String?
+  petName         String
+  petMemorialText String?
+  promoCode       String?
+  discountAmount  Int          @default(0)
+  isGift          Boolean      @default(false)
+  recipientName   String?
+  recipientEmail  String?
+  personalMessage String?
+  giftToken       String?      @unique
+  giftViewedAt    DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  portraits Portrait[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum PackageType {
+  SINGLE
+  MEMORIAL
+  PREMIUM
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model Portrait {
+  id             String         @id @default(cuid())
+  orderId        String
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  style          PortraitStyle
+  status         PortraitStatus @default(PENDING)
+  previewUrl     String?
+  fullUrl        String?
+  printReadyUrl  String?
+  previewKey     String?
+  fullKey        String?
+  printReadyKey  String?
+  resolvedPrompt String?
+  failureReason  String?
+  retryCount     Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum PortraitStyle {
+  WATERCOLOR
+  OIL_PAINTING
+  RENAISSANCE
+  RAINBOW_BRIDGE
+  PENCIL_SKETCH
+  POP_ART
+  STAINED_GLASS
+  IMPRESSIONIST
+  ANIME
+  MINIMALIST
+}
+
+enum PortraitStatus {
   PENDING
   GENERATING
   COMPLETED
   FAILED
 }
 
-model ReferenceAsset {
-  id               String       @id @default(cuid())
-  userId           String
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId       String
-  originalFilename String?
-  storageKey       String
-  mimeType         String
-  fileSize         Int
-  width            Int?
-  height           Int?
-  createdAt        DateTime     @default(now())
-
-  generations      Generation[]
-
-  @@index([userId])
-  @@index([categoryId])
+model PromoCode {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  type         DiscountType
+  value        Int
+  description  String?
+  isActive     Boolean      @default(true)
+  maxUses      Int?
+  usedCount    Int          @default(0)
+  expiresAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
-// ─── Packs (optional multi-image bundles) ─────────────
-
-model Pack {
-  id          String       @id @default(cuid())
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId  String
-  label       String       // "Wedding Suite", "Social Media Kit"
-  style       String?
-  metadata    Json?
-
-  generations Generation[]
-
-  createdAt   DateTime     @default(now())
-
-  @@index([userId])
-}
-
-// ─── Credits ──────────────────────────────────────────
-
-model CreditBalance {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance         Int      @default(0)
-  lifetimeEarned  Int      @default(0)
-  lifetimeSpent   Int      @default(0)
-  updatedAt       DateTime @updatedAt
-}
-
-model CreditTransaction {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type            CreditTxnType
-  amount          Int           // positive = credit, negative = debit
-  balance         Int           // balance AFTER this transaction (audit trail)
-
-  // References
-  generationId    String?       // if spent on a generation
-  stripePaymentId String?       // if from a purchase
-  packId          String?       // if spent on a pack
-  description     String?
-
-  createdAt       DateTime      @default(now())
-
-  @@index([userId])
-  @@index([createdAt])
-  @@unique([userId, type, stripePaymentId])
-}
-
-enum CreditTxnType {
-  PURCHASE        // bought credits
-  SIGNUP_BONUS    // free credits on signup
-  GENERATION      // spent on a generation
-  PACK_GENERATION // spent on pack generation
-  REFUND          // refunded for failed generation
-  PROMO           // promotional credits
-  SUBSCRIPTION    // monthly subscription allocation
-}
-
-// ─── Subscriptions ────────────────────────────────────
-
-model Subscription {
-  id               String    @id @default(cuid())
-  userId           String    @unique
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan             SubPlan
-  stripeCustomerId String?
-  stripeSubId      String?
-  status           String    @default("active")
-  currentPeriodEnd DateTime?
-  monthlyCredits   Int       @default(0) // credits granted per billing cycle
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@index([stripeCustomerId])
-}
-
-enum SubPlan {
-  FREE
-  STARTER     // AED 29/mo — 20 credits/mo
-  PRO         // AED 79/mo — 100 credits/mo
-  UNLIMITED   // AED 199/mo — unlimited
-}
-
-// ─── Translation Cache ────────────────────────────────
-
-model TranslationCache {
-  id        String   @id @default(cuid())
-  input     String   // Original text
-  fromLang  String   // "en", "ar", "hi"
-  toLang    String   // "en", "ar", "hi"
-  fieldType String   // "name", "phrase", "venue", "general", "ui"
-  output    String   // Translated/transliterated text
-  createdAt DateTime @default(now())
-
-  @@unique([input, fromLang, toLang, fieldType])
-  @@index([fromLang, toLang, fieldType])
+enum DiscountType {
+  PERCENT
+  FIXED
 }

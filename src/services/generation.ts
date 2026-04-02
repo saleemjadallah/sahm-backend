@@ -1,0 +1,443 @@
+import { GoogleGenAI } from "@google/genai";
+import {
+  OrderStatus,
+  PackageType,
+  PortraitStatus,
+  PortraitStyle,
+  type Portrait,
+} from "@prisma/client";
+import sharp from "sharp";
+import { env } from "@/config/env.js";
+import { STYLE_DEFINITIONS } from "@/lib/catalog.js";
+import { prisma } from "@/lib/prisma.js";
+import { createPrintGuidePdf } from "@/lib/print-guide.js";
+import { Semaphore } from "@/lib/semaphore.js";
+import { getObjectBuffer, uploadBuffer } from "@/lib/storage.js";
+import { stripe } from "@/lib/stripe.js";
+import {
+  sendGiftNotificationEmail,
+  sendGiftSentConfirmationEmail,
+  sendOrderConfirmationEmail,
+  sendPortraitsReadyEmail,
+} from "@/services/email.js";
+
+type ReferencePhoto = {
+  mimeType: string;
+  buffer: Buffer;
+};
+
+const gemini = env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: env.GEMINI_API_KEY }) : null;
+const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
+
+const SHARED_PROMPT_GUARDRAILS = [
+  "Preserve the pet's actual likeness from the uploaded reference photos.",
+  "Match face shape, ear shape, coat pattern, markings, muzzle, nose, eye color, and overall body proportions carefully.",
+  "Capture warmth and dignity appropriate for a memorial portrait, not a novelty image.",
+  "Render a finished artwork that feels premium, frame-worthy, and emotionally appropriate for a sympathy gift.",
+  "Keep the subject singular and clear with no extra pets, no extra humans, and no duplicate limbs or facial features.",
+  "Output a square fine-art composition that will still reproduce beautifully when centered on a 16x20 print canvas.",
+];
+
+function buildPrompt(
+  portrait: Portrait,
+  input: {
+    petName: string;
+    type: string;
+    breed?: string | null;
+    description?: string | null;
+    memorialText?: string | null;
+  },
+) {
+  const style = STYLE_DEFINITIONS[portrait.style];
+  const breedLabel = input.breed ? `${input.breed} ` : "";
+  const details = input.description?.trim();
+  const memorialText = input.memorialText?.trim();
+
+  const sections = [
+    "Role:",
+    `You are a world-class pet memorial portrait artist specializing in ${style.label} artwork for bereaved pet families.`,
+    "",
+    "Subject:",
+    `Create a ${style.label} memorial portrait of ${input.petName}, a ${breedLabel}${input.type.toLowerCase()}.`,
+    details ? `Special identity details to preserve: ${details}.` : "",
+    "",
+    "Style Direction:",
+    style.guidance,
+    `Emotional tone: ${style.emotionalTone}.`,
+    `Composition: ${style.composition}.`,
+    `Background: ${style.background}.`,
+    `Lighting: ${style.lighting}.`,
+    "",
+    "Memorial Typography:",
+    memorialText
+      ? `Use the memorial text "${memorialText}" only if it can be integrated elegantly. ${style.textTreatment}.`
+      : "Do not add any text unless the composition genuinely benefits from a subtle memorial inscription.",
+    "",
+    "Quality Guardrails:",
+    ...SHARED_PROMPT_GUARDRAILS.map((line) => `- ${line}`),
+    `- ${style.negativeGuidance}.`,
+    "",
+    "Output:",
+    "High-resolution fine-art image, square aspect ratio, clean finishing detail, suitable for digital delivery and print preparation.",
+  ];
+
+  return sections.filter(Boolean).join("\n");
+}
+
+function hexToRgb(hex: string) {
+  const safe = hex.replace("#", "");
+  return {
+    r: Number.parseInt(safe.slice(0, 2), 16),
+    g: Number.parseInt(safe.slice(2, 4), 16),
+    b: Number.parseInt(safe.slice(4, 6), 16),
+  };
+}
+
+async function createDemoPortrait(petName: string, style: PortraitStyle) {
+  const definition = STYLE_DEFINITIONS[style];
+  const [start, middle, end] = definition.palette.map(hexToRgb);
+  const overlay = `
+    <svg width="1600" height="1600" viewBox="0 0 1600 1600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${definition.palette[0]}"/>
+          <stop offset="55%" stop-color="${definition.palette[1]}"/>
+          <stop offset="100%" stop-color="${definition.palette[2]}"/>
+        </linearGradient>
+      </defs>
+      <rect width="1600" height="1600" rx="120" fill="url(#bg)"/>
+      <circle cx="800" cy="660" r="320" fill="rgba(255,255,255,0.22)"/>
+      <ellipse cx="650" cy="560" rx="80" ry="160" fill="rgba(61,61,61,0.14)"/>
+      <ellipse cx="950" cy="560" rx="80" ry="160" fill="rgba(61,61,61,0.14)"/>
+      <ellipse cx="800" cy="800" rx="260" ry="220" fill="rgba(255,255,255,0.38)"/>
+      <circle cx="710" cy="760" r="22" fill="#3d3d3d"/>
+      <circle cx="890" cy="760" r="22" fill="#3d3d3d"/>
+      <path d="M760 880 Q800 920 840 880" stroke="#3d3d3d" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <text x="800" y="1280" text-anchor="middle" font-size="120" font-family="Georgia, serif" fill="#ffffff">${escapeXml(
+        petName,
+      )}</text>
+      <text x="800" y="1385" text-anchor="middle" font-size="58" font-family="Arial, sans-serif" fill="rgba(255,255,255,0.92)">${escapeXml(
+        definition.label,
+      )}</text>
+    </svg>
+  `;
+
+  return sharp({
+    create: {
+      width: 1600,
+      height: 1600,
+      channels: 3,
+      background: {
+        r: start.r,
+        g: middle.g,
+        b: end.b,
+      },
+    },
+  })
+    .composite([{ input: Buffer.from(overlay) }])
+    .png()
+    .toBuffer();
+}
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+async function generateViaGemini(prompt: string, references: ReferencePhoto[]) {
+  if (!gemini) {
+    throw new Error("Gemini is not configured.");
+  }
+
+  const input = [
+    { type: "text" as const, text: prompt },
+    ...references.map((reference) => ({
+      type: "image" as const,
+      data: reference.buffer.toString("base64"),
+      mime_type: reference.mimeType as "image/png" | "image/jpeg" | "image/webp" | "image/heic" | "image/heif",
+    })),
+  ];
+
+  const interaction = (await Promise.race([
+    gemini.interactions.create({
+      model: env.GEMINI_IMAGE_MODEL,
+      input,
+      response_modalities: ["image"],
+    }),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Gemini request timed out.")), 120_000);
+    }),
+  ])) as { outputs?: Array<{ type?: string; data?: string }> };
+
+  const imageOutput = (interaction.outputs ?? []).find((output) => output.type === "image" && typeof output.data === "string");
+
+  if (!imageOutput?.data) {
+    throw new Error("Gemini did not return an image.");
+  }
+
+  return Buffer.from(imageOutput.data, "base64");
+}
+
+async function renderPortraitAssets(source: Buffer) {
+  const full = await sharp(source)
+    .rotate()
+    .resize(4096, 4096, { fit: "inside" })
+    .png()
+    .toBuffer();
+
+  const preview = await sharp(full)
+    .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
+
+  const printReady = await sharp(full)
+    .resize(4800, 6000, {
+      fit: "contain",
+      background: "#f9f5f0",
+    })
+    .withMetadata({ density: 300 })
+    .png()
+    .toBuffer();
+
+  return { preview, full, printReady };
+}
+
+async function uploadPortraitAssets(orderId: string, portraitId: string, buffers: Awaited<ReturnType<typeof renderPortraitAssets>>) {
+  const previewKey = `portraits/${orderId}/${portraitId}/preview.png`;
+  const fullKey = `portraits/${orderId}/${portraitId}/full.png`;
+  const printReadyKey = `portraits/${orderId}/${portraitId}/print.png`;
+
+  const [preview, full, printReady] = await Promise.all([
+    uploadBuffer(previewKey, buffers.preview, "image/png"),
+    uploadBuffer(fullKey, buffers.full, "image/png"),
+    uploadBuffer(printReadyKey, buffers.printReady, "image/png"),
+  ]);
+
+  return {
+    preview,
+    full,
+    printReady,
+  };
+}
+
+async function generateSinglePortrait(orderId: string, portraitId: string) {
+  const portrait = await prisma.portrait.findUniqueOrThrow({
+    where: { id: portraitId },
+    include: {
+      order: {
+        include: {
+          user: true,
+          pet: {
+            include: {
+              photos: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const prompt = buildPrompt(portrait, {
+    petName: portrait.order.petName,
+    type: portrait.order.pet.type,
+    breed: portrait.order.pet.breed,
+    description: portrait.order.pet.description,
+    memorialText: portrait.order.petMemorialText,
+  });
+
+  await prisma.portrait.update({
+    where: { id: portraitId },
+    data: {
+      status: PortraitStatus.GENERATING,
+      resolvedPrompt: prompt,
+    },
+  });
+
+  const references: ReferencePhoto[] = [];
+  for (const photo of portrait.order.pet.photos) {
+    const image = await getObjectBuffer(photo.processedKey ?? photo.originalKey).catch(() => null);
+    if (image) {
+      references.push({ buffer: image, mimeType: "image/png" });
+    }
+  }
+
+  let output: Buffer | null = null;
+  let failureReason = "";
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (gemini) {
+        output = await generateViaGemini(
+          attempt === 0 ? prompt : `${prompt} Preserve likeness even more faithfully and keep the expression serene.`,
+          references,
+        );
+      } else if (env.ENABLE_DEMO_GENERATION) {
+        output = await createDemoPortrait(portrait.order.petName, portrait.style);
+      } else {
+        throw new Error("Gemini is not configured and demo generation is disabled.");
+      }
+      break;
+    } catch (error) {
+      failureReason = error instanceof Error ? error.message : "Unknown portrait generation failure.";
+      await prisma.portrait.update({
+        where: { id: portraitId },
+        data: { retryCount: attempt + 1, failureReason },
+      });
+    }
+  }
+
+  if (!output) {
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: {
+        status: PortraitStatus.FAILED,
+        failureReason,
+      },
+    });
+    return;
+  }
+
+  const buffers = await renderPortraitAssets(output);
+  const uploaded = await uploadPortraitAssets(orderId, portraitId, buffers);
+
+  await prisma.portrait.update({
+    where: { id: portraitId },
+    data: {
+      status: PortraitStatus.COMPLETED,
+      previewUrl: uploaded.preview.url,
+      previewKey: uploaded.preview.key,
+      fullUrl: uploaded.full.url,
+      fullKey: uploaded.full.key,
+      printReadyUrl: uploaded.printReady.url,
+      printReadyKey: uploaded.printReady.key,
+      failureReason: null,
+    },
+  });
+}
+
+async function applyRefund(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { portraits: true },
+  });
+
+  if (!order || !stripe || !order.stripePaymentId) {
+    return;
+  }
+
+  const failedCount = order.portraits.filter((portrait) => portrait.status === PortraitStatus.FAILED).length;
+  if (!failedCount) {
+    return;
+  }
+
+  const refundAmount =
+    failedCount === order.portraits.length
+      ? order.amount
+      : Math.round((order.amount / order.portraits.length) * failedCount);
+
+  if (refundAmount <= 0) {
+    return;
+  }
+
+  await stripe.refunds.create({
+    payment_intent: order.stripePaymentId,
+    amount: refundAmount,
+  });
+}
+
+export async function startOrderGeneration(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: true,
+      pet: {
+        include: {
+          photos: true,
+        },
+      },
+      portraits: true,
+    },
+  });
+
+  if (!order) {
+    return;
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.GENERATING },
+  });
+
+  await Promise.all(
+    order.portraits.map((portrait) =>
+      semaphore.use(() => generateSinglePortrait(orderId, portrait.id)),
+    ),
+  );
+
+  const refreshed = await prisma.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: {
+      user: true,
+      portraits: true,
+    },
+  });
+
+  const completedCount = refreshed.portraits.filter(
+    (portrait) => portrait.status === PortraitStatus.COMPLETED,
+  ).length;
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: completedCount > 0 ? OrderStatus.COMPLETED : OrderStatus.FAILED,
+    },
+  });
+
+  await applyRefund(orderId);
+
+  if (completedCount > 0) {
+    await sendPortraitsReadyEmail(refreshed.user, refreshed, refreshed.portraits);
+    if (refreshed.isGift && refreshed.giftToken) {
+      await sendGiftNotificationEmail(refreshed, refreshed.user.name ?? refreshed.user.email, refreshed.portraits);
+      await sendGiftSentConfirmationEmail(refreshed.user, refreshed);
+    }
+  }
+}
+
+export async function handlePaidOrder(orderId: string, stripePaymentId?: string | null, stripeSessionId?: string | null) {
+  const order = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: OrderStatus.PAID,
+      stripePaymentId: stripePaymentId ?? undefined,
+      stripeSessionId: stripeSessionId ?? undefined,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  await sendOrderConfirmationEmail(order.user, order);
+  setTimeout(() => {
+    void startOrderGeneration(orderId);
+  }, 0);
+}
+
+export function getPackagePortraitCount(packageType: PackageType) {
+  switch (packageType) {
+    case PackageType.SINGLE:
+      return 1;
+    case PackageType.MEMORIAL:
+      return 5;
+    case PackageType.PREMIUM:
+      return 10;
+  }
+}
+
+export function createPrintGuideBuffer(petName: string) {
+  return createPrintGuidePdf(petName);
+}
