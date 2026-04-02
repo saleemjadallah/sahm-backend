@@ -4,13 +4,13 @@ import { DiscountType, PackageType, PetType, PortraitStyle } from "@prisma/clien
 import sharp from "sharp";
 import Stripe from "stripe";
 import { randomBytes, randomUUID } from "node:crypto";
-import { env } from "@/config/env.js";
-import { getPackageStyles, PACKAGE_PRICING } from "@/lib/catalog.js";
-import { prisma } from "@/lib/prisma.js";
-import { createPrintGuidePdf } from "@/lib/print-guide.js";
-import { getObjectBuffer, uploadBuffer, deleteObject } from "@/lib/storage.js";
-import { stripe } from "@/lib/stripe.js";
-import { handlePaidOrder } from "@/services/generation.js";
+import { env } from "../config/env.js";
+import { getPackageStyles, PACKAGE_PRICING } from "../lib/catalog.js";
+import { prisma } from "../lib/prisma.js";
+import { createPrintGuidePdf } from "../lib/print-guide.js";
+import { getObjectBuffer, uploadBuffer, deleteObject } from "../lib/storage.js";
+import { stripe } from "../lib/stripe.js";
+import { handlePaidOrder } from "../services/generation.js";
 
 function requireUser(request: FastifyRequest) {
   if (!request.authUser) {

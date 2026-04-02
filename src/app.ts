@@ -4,9 +4,9 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import fastifyRawBody from "fastify-raw-body";
 import Fastify from "fastify";
-import { env } from "@/config/env.js";
-import { authenticateRequest } from "@/lib/auth.js";
-import { registerRoutes } from "@/routes/index.js";
+import { env } from "./config/env.js";
+import { authenticateRequest } from "./lib/auth.js";
+import { registerRoutes } from "./routes/index.js";
 
 export function buildApp() {
   const app = Fastify({

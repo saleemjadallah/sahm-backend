@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { env } from "@/config/env.js";
+import { env } from "../config/env.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const localStorageRoot = path.resolve(dirname, "../../.storage");

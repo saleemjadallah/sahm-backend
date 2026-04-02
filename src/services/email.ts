@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import type { Order, Portrait, User } from "@prisma/client";
-import { env } from "@/config/env.js";
+import { env } from "../config/env.js";
 
 const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 

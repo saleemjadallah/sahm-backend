@@ -1,7 +1,7 @@
 import { createClerkClient, verifyToken } from "@clerk/backend";
 import type { FastifyRequest } from "fastify";
-import { prisma } from "@/lib/prisma.js";
-import { env, isProduction } from "@/config/env.js";
+import { prisma } from "./prisma.js";
+import { env, isProduction } from "../config/env.js";
 
 export type AuthUser = {
   id: string;

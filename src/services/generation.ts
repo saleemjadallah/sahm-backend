@@ -7,19 +7,19 @@ import {
   type Portrait,
 } from "@prisma/client";
 import sharp from "sharp";
-import { env } from "@/config/env.js";
-import { STYLE_DEFINITIONS } from "@/lib/catalog.js";
-import { prisma } from "@/lib/prisma.js";
-import { createPrintGuidePdf } from "@/lib/print-guide.js";
-import { Semaphore } from "@/lib/semaphore.js";
-import { getObjectBuffer, uploadBuffer } from "@/lib/storage.js";
-import { stripe } from "@/lib/stripe.js";
+import { env } from "../config/env.js";
+import { STYLE_DEFINITIONS } from "../lib/catalog.js";
+import { prisma } from "../lib/prisma.js";
+import { createPrintGuidePdf } from "../lib/print-guide.js";
+import { Semaphore } from "../lib/semaphore.js";
+import { getObjectBuffer, uploadBuffer } from "../lib/storage.js";
+import { stripe } from "../lib/stripe.js";
 import {
   sendGiftNotificationEmail,
   sendGiftSentConfirmationEmail,
   sendOrderConfirmationEmail,
   sendPortraitsReadyEmail,
-} from "@/services/email.js";
+} from "./email.js";
 
 type ReferencePhoto = {
   mimeType: string;
