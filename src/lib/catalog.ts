@@ -154,16 +154,67 @@ export const STYLE_DEFINITIONS: Record<PortraitStyle, StyleDefinition> = {
       "avoid clutter, photorealism, thick comic outlines, too many colors, and decorative excess",
     palette: ["#f8f5f2", "#7c9885", "#3d3d3d"],
   },
+  YOUNG_AGAIN: {
+    label: "Young Again",
+    shortDescription: "Your pet reimagined as a puppy or kitten — same soul, bright new eyes.",
+    guidance:
+      "Create a warm, realistic portrait showing this pet as a very young puppy or kitten (approximately 8-12 weeks old). " +
+      "CRITICAL: Study the reference photos to identify every unique marking — coat color pattern, spot placement, " +
+      "patch shapes, stripe patterns, facial markings, nose color, and eye color. These exact markings MUST appear " +
+      "on the young version. The puppy/kitten should look like the same individual animal, just much younger. " +
+      "De-age indicators: rounder face, proportionally larger paws, shorter muzzle, bigger and brighter eyes, " +
+      "fluffier and softer coat texture, slightly oversized ears relative to head. " +
+      "Show the young pet in a playful, curious, or gently joyful moment — perhaps mid-step with a slight head tilt, " +
+      "or sitting with wide attentive eyes. The rendering style should be warm photorealistic — like a professional " +
+      "pet photographer captured a perfect moment of this puppy or kitten in soft natural light.",
+    emotionalTone: "joyful, tender, and gently bittersweet — celebrating the beginning of a life well-loved",
+    composition: "close portrait or three-quarter body, slightly low angle to emphasize the small size and curiosity of youth",
+    background: "soft, warm, blurred natural setting — golden-hour grass, a sunlit living room, or a gentle garden bokeh",
+    lighting: "warm golden-hour natural light with soft catchlights in the eyes and gentle rim light on fur edges",
+    textTreatment: "if memorial text is used, place it very subtly along the lower edge like a gentle photo caption",
+    negativeGuidance:
+      "avoid cartoonish or illustrated rendering — this must feel like a real photograph; " +
+      "avoid changing the pet's species, markings, or coloring; avoid toy props or costumes; " +
+      "avoid making the animal look generic — it must be recognizably the same individual; " +
+      "avoid sad or melancholic tone — this should feel warm and life-affirming",
+    palette: ["#fdf6ec", "#e8c97a", "#8fba8f"],
+  },
 };
 
 export const PACKAGE_PRICING: Record<
-  PackageType,
+  string,
   { amount: number; label: string; portraitCount: number }
 > = {
   SINGLE: { amount: 999, label: "Single Portrait", portraitCount: 1 },
   MEMORIAL: { amount: 2999, label: "Memorial Package", portraitCount: 5 },
   PREMIUM: { amount: 4999, label: "Premium Package", portraitCount: 10 },
 };
+
+/* ── Volume-tier pricing (new pick-your-own flow) ────────────── */
+
+export const VOLUME_TIERS = [
+  { min: 1, max: 1, unitCents: 999 },
+  { min: 2, max: 3, unitCents: 799 },
+  { min: 4, max: 5, unitCents: 599 },
+  { min: 6, max: 10, unitCents: 499 },
+] as const;
+
+export function getUnitPrice(count: number): number {
+  const tier = VOLUME_TIERS.find((t) => count >= t.min && count <= t.max);
+  return tier?.unitCents ?? 499;
+}
+
+export function calculatePrice(count: number): number {
+  if (count <= 0) return 0;
+  return getUnitPrice(count) * count;
+}
+
+/** The 3 most compelling styles generated as free previews (cheap model, low res). */
+export const PREVIEW_STYLES: PortraitStyle[] = [
+  PortraitStyle.WATERCOLOR,
+  PortraitStyle.RAINBOW_BRIDGE,
+  PortraitStyle.RENAISSANCE,
+];
 
 export const MEMORIAL_CURATED_STYLES: PortraitStyle[] = [
   PortraitStyle.WATERCOLOR,
@@ -173,7 +224,22 @@ export const MEMORIAL_CURATED_STYLES: PortraitStyle[] = [
   PortraitStyle.IMPRESSIONIST,
 ];
 
-export const ALL_STYLES: PortraitStyle[] = Object.keys(STYLE_DEFINITIONS) as PortraitStyle[];
+/** All standard styles (excludes add-on styles like YOUNG_AGAIN). */
+export const ALL_STYLES: PortraitStyle[] = (Object.keys(STYLE_DEFINITIONS) as PortraitStyle[]).filter(
+  (s) => s !== PortraitStyle.YOUNG_AGAIN,
+);
+
+/** Portrait styles sold as flat-priced add-ons, not volume-tiered. */
+export const ADDON_PORTRAIT_STYLES: PortraitStyle[] = [PortraitStyle.YOUNG_AGAIN];
+export const ADDON_PORTRAIT_PRICE_CENTS = 499;
+
+/** Document add-on pricing (Letter From Heaven, Storybook). */
+export const ADDON_CATALOG = {
+  LETTER_FROM_HEAVEN: { label: "Letter From Heaven", priceCents: 499 },
+  STORYBOOK: { label: "A Day In Their Life", priceCents: 999 },
+} as const;
+
+export type AddOnType = keyof typeof ADDON_CATALOG;
 
 export function getPackageStyles(
   packageType: PackageType,
@@ -191,5 +257,6 @@ export function getPackageStyles(
     return MEMORIAL_CURATED_STYLES;
   }
 
+  // PREMIUM and CUSTOM both generate all styles
   return ALL_STYLES;
 }

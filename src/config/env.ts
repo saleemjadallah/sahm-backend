@@ -10,6 +10,8 @@ export const env = cleanEnv(process.env, {
   CLERK_WEBHOOK_SECRET: str({ default: "" }),
   GEMINI_API_KEY: str({ default: "" }),
   GEMINI_IMAGE_MODEL: str({ default: "gemini-3-pro-image-preview" }),
+  GEMINI_PREVIEW_MODEL: str({ default: "" }),
+  GEMINI_TEXT_MODEL: str({ default: "gemini-2.5-flash" }),
   GEMINI_MAX_CONCURRENT: num({ default: 3 }),
   ENABLE_DEMO_GENERATION: bool({ default: true }),
   R2_ACCOUNT_ID: str({ default: "" }),
@@ -26,6 +28,8 @@ export const env = cleanEnv(process.env, {
   RESEND_API_KEY: str({ default: "" }),
   RESEND_FROM_EMAIL: str({ default: "hello@getsahm.com" }),
   JWT_SECRET: str({ default: "replace-me" }),
+  PRINTFUL_API_TOKEN: str({ default: "" }),
+  PRINTFUL_WEBHOOK_SECRET: str({ default: "" }),
 });
 
 export const isProduction = env.NODE_ENV === "production";

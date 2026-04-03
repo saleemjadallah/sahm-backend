@@ -15,20 +15,26 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pets    Pet[]
-  orders  Order[]
+  pets         Pet[]
+  orders       Order[]
+  printOrders  PrintOrder[]
 }
 
 model Pet {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  type        PetType   @default(DOG)
-  breed       String?
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  type              PetType   @default(DOG)
+  breed             String?
+  description       String?
+  personalityTraits String[]  @default([])
+  funnyHabits       String?
+  favoriteThings    String?
+  ownerName         String?
+  specialMemory     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   photos  PetPhoto[]
   orders  Order[]
@@ -68,6 +74,7 @@ model Order {
   packageType     PackageType
   status          OrderStatus  @default(PENDING)
   amount          Int
+  portraitCount   Int?
   stripePaymentId String?
   stripeSessionId String?
   petName         String
@@ -83,7 +90,9 @@ model Order {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  portraits Portrait[]
+  portraits   Portrait[]
+  addOns      OrderAddOn[]
+  printOrders PrintOrder[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -93,9 +102,12 @@ enum PackageType {
   SINGLE
   MEMORIAL
   PREMIUM
+  CUSTOM
 }
 
 enum OrderStatus {
+  PREVIEW
+  PREVIEWS_READY
   PENDING
   PAID
   GENERATING
@@ -109,6 +121,7 @@ model Portrait {
   order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   style          PortraitStyle
   status         PortraitStatus @default(PENDING)
+  selected       Boolean        @default(false)
   previewUrl     String?
   fullUrl        String?
   printReadyUrl  String?
@@ -121,8 +134,11 @@ model Portrait {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
+  printOrders PrintOrder[]
+
   @@index([orderId, createdAt])
   @@index([status, createdAt])
+  @@unique([orderId, style])
 }
 
 enum PortraitStyle {
@@ -136,6 +152,7 @@ enum PortraitStyle {
   IMPRESSIONIST
   ANIME
   MINIMALIST
+  YOUNG_AGAIN
 }
 
 enum PortraitStatus {
@@ -162,4 +179,95 @@ model PromoCode {
 enum DiscountType {
   PERCENT
   FIXED
+}
+
+enum AddOnType {
+  LETTER_FROM_HEAVEN
+  STORYBOOK
+}
+
+enum AddOnStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model OrderAddOn {
+  id            String      @id @default(cuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type          AddOnType
+  status        AddOnStatus @default(PENDING)
+  priceCents    Int
+  documentUrl   String?
+  documentKey   String?
+  previewUrl    String?
+  previewKey    String?
+  generatedText String?
+  metadata      Json?
+  failureReason String?
+  retryCount    Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([orderId, type])
+}
+
+model PrintOrder {
+  id                String           @id @default(cuid())
+  orderId           String
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  portraitId        String
+  portrait          Portrait         @relation(fields: [portraitId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productType       String           // FRAMED_POSTER, CANVAS, FRAMED_CANVAS
+  size              String           // 12x16, 16x20, 24x36
+  frameColor        String?          // black, white, natural
+  printfulVariantId Int
+
+  status            PrintOrderStatus @default(PENDING)
+  printfulOrderId   Int?             @unique
+  printfulStatus    String?
+  trackingNumber    String?
+  trackingUrl       String?
+  shippingCarrier   String?
+
+  retailPrice       Int              // cents - what customer pays for product
+  shippingCost      Int              @default(0) // cents - shipping charged to customer
+  printfulCost      Int              @default(0) // cents - what Printful charges us
+
+  stripeSessionId   String?
+  stripePaymentId   String?
+
+  recipientName     String
+  recipientAddress1 String
+  recipientAddress2 String?
+  recipientCity     String
+  recipientState    String
+  recipientZip      String
+  recipientCountry  String           @default("US")
+  recipientEmail    String?
+  recipientPhone    String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+  @@index([status])
+}
+
+enum PrintOrderStatus {
+  PENDING
+  PAID
+  SUBMITTING
+  SUBMITTED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  FAILED
+  CANCELED
 }

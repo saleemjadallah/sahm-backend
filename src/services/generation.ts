@@ -8,7 +8,8 @@ import {
 } from "@prisma/client";
 import sharp from "sharp";
 import { env } from "../config/env.js";
-import { STYLE_DEFINITIONS } from "../lib/catalog.js";
+import { PREVIEW_STYLES, STYLE_DEFINITIONS } from "../lib/catalog.js";
+import { calculateFailedOrderRefund } from "../lib/order-pricing.js";
 import { prisma } from "../lib/prisma.js";
 import { createPrintGuidePdf } from "../lib/print-guide.js";
 import { Semaphore } from "../lib/semaphore.js";
@@ -28,6 +29,8 @@ type ReferencePhoto = {
 
 const gemini = env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: env.GEMINI_API_KEY }) : null;
 const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
+
+const previewModel = env.GEMINI_PREVIEW_MODEL || env.GEMINI_IMAGE_MODEL;
 
 const ANATOMICAL_FIDELITY = [
   "CRITICAL — Anatomical fidelity must override stylistic conventions:",
@@ -58,12 +61,17 @@ function buildPrompt(
   const details = input.description?.trim();
   const memorialText = input.memorialText?.trim();
 
+  const isYoungAgain = portrait.style === PortraitStyle.YOUNG_AGAIN;
+  const subjectLine = isYoungAgain
+    ? `Reimagine ${input.petName}, a ${breedLabel}${input.type.toLowerCase()}, as a very young puppy/kitten (8-12 weeks old). Preserve every unique marking, pattern, and color from the reference photos — this must be recognizably the same individual animal, just at the very beginning of their life.`
+    : `Create a ${style.label} memorial portrait of ${input.petName}, a ${breedLabel}${input.type.toLowerCase()}.`;
+
   const sections = [
     "Role:",
     `You are a world-class pet memorial portrait artist specializing in ${style.label} artwork for bereaved pet families.`,
     "",
     "Subject:",
-    `Create a ${style.label} memorial portrait of ${input.petName}, a ${breedLabel}${input.type.toLowerCase()}.`,
+    subjectLine,
     details ? `Key identity details to preserve: ${details}.` : "",
     "",
     "Anatomical Fidelity (HIGHEST PRIORITY):",
@@ -156,7 +164,7 @@ function escapeXml(value: string) {
     .replaceAll("'", "&apos;");
 }
 
-async function generateViaGemini(prompt: string, references: ReferencePhoto[]) {
+async function generateViaGemini(prompt: string, references: ReferencePhoto[], model?: string) {
   if (!gemini) {
     throw new Error("Gemini is not configured.");
   }
@@ -172,7 +180,7 @@ async function generateViaGemini(prompt: string, references: ReferencePhoto[]) {
 
   const interaction = (await Promise.race([
     gemini.interactions.create({
-      model: env.GEMINI_IMAGE_MODEL,
+      model: model ?? env.GEMINI_IMAGE_MODEL,
       input,
       response_modalities: ["image"],
     }),
@@ -188,6 +196,28 @@ async function generateViaGemini(prompt: string, references: ReferencePhoto[]) {
   }
 
   return Buffer.from(imageOutput.data, "base64");
+}
+
+/* ── Asset rendering ─────────────────────────────────────── */
+
+async function renderPreviewOnly(source: Buffer) {
+  const resized = await sharp(source)
+    .rotate()
+    .resize(600, 600, { fit: "inside" })
+    .png()
+    .toBuffer();
+
+  const watermark = `
+    <svg width="600" height="600" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="510" width="600" height="90" fill="rgba(61,61,61,0.46)"/>
+      <text x="300" y="560" text-anchor="middle" font-size="26" font-family="Arial, sans-serif" fill="rgba(255,255,255,0.96)">Preview</text>
+    </svg>
+  `;
+
+  return sharp(resized)
+    .composite([{ input: Buffer.from(watermark) }])
+    .png()
+    .toBuffer();
 }
 
 async function renderPortraitAssets(source: Buffer) {
@@ -237,25 +267,112 @@ async function uploadPortraitAssets(orderId: string, portraitId: string, buffers
     uploadBuffer(printReadyKey, buffers.printReady, "image/png"),
   ]);
 
-  return {
-    preview,
-    full,
-    printReady,
-  };
+  return { preview, full, printReady };
 }
 
-async function generateSinglePortrait(orderId: string, portraitId: string) {
+/* ── Portrait generators ─────────────────────────────────── */
+
+async function loadReferences(petPhotos: Array<{ processedKey: string | null; originalKey: string }>) {
+  const references: ReferencePhoto[] = [];
+  for (const photo of petPhotos) {
+    const image = await getObjectBuffer(photo.processedKey ?? photo.originalKey).catch(() => null);
+    if (image) {
+      references.push({ buffer: image, mimeType: "image/png" });
+    }
+  }
+  return references;
+}
+
+/** Generate a portrait at preview quality (cheap model, 600px, preview-only asset). */
+async function generatePreviewPortrait(orderId: string, portraitId: string) {
   const portrait = await prisma.portrait.findUniqueOrThrow({
     where: { id: portraitId },
     include: {
       order: {
         include: {
           user: true,
-          pet: {
-            include: {
-              photos: true,
-            },
-          },
+          pet: { include: { photos: true } },
+        },
+      },
+    },
+  });
+
+  const prompt = buildPrompt(portrait, {
+    petName: portrait.order.petName,
+    type: portrait.order.pet.type,
+    breed: portrait.order.pet.breed,
+    description: portrait.order.pet.description,
+    memorialText: portrait.order.petMemorialText,
+  });
+
+  await prisma.portrait.update({
+    where: { id: portraitId },
+    data: { status: PortraitStatus.GENERATING, resolvedPrompt: prompt },
+  });
+
+  const references = await loadReferences(portrait.order.pet.photos);
+
+  let output: Buffer | null = null;
+  let failureReason = "";
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (gemini) {
+        output = await generateViaGemini(
+          attempt === 0
+            ? prompt
+            : `${prompt}\n\nRETRY NOTE: The previous attempt did not match the reference photos closely enough. Pay extra attention to the pet's exact ear position, ear shape, face structure, and markings. The reference photos are the authority — do not let artistic style override anatomy.`,
+          references,
+          previewModel,
+        );
+      } else if (env.ENABLE_DEMO_GENERATION) {
+        output = await createDemoPortrait(portrait.order.petName, portrait.style);
+      } else {
+        throw new Error("Gemini is not configured and demo generation is disabled.");
+      }
+      break;
+    } catch (error) {
+      failureReason = error instanceof Error ? error.message : "Unknown portrait generation failure.";
+      await prisma.portrait.update({
+        where: { id: portraitId },
+        data: { retryCount: attempt + 1, failureReason },
+      });
+    }
+  }
+
+  if (!output) {
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: { status: PortraitStatus.FAILED, failureReason },
+    });
+    return;
+  }
+
+  // Only render the small preview — no full or print-ready assets
+  const previewBuffer = await renderPreviewOnly(output);
+  const previewKey = `portraits/${orderId}/${portraitId}/preview.png`;
+  const uploaded = await uploadBuffer(previewKey, previewBuffer, "image/png");
+
+  await prisma.portrait.update({
+    where: { id: portraitId },
+    data: {
+      status: PortraitStatus.COMPLETED,
+      previewUrl: uploaded.url,
+      previewKey: uploaded.key,
+      failureReason: null,
+    },
+  });
+}
+
+/** Generate a portrait at full quality (full model, all 3 asset variants). */
+async function generateFullQualityPortrait(orderId: string, portraitId: string) {
+  const portrait = await prisma.portrait.findUniqueOrThrow({
+    where: { id: portraitId },
+    include: {
+      order: {
+        include: {
+          user: true,
+          pet: { include: { photos: true } },
         },
       },
     },
@@ -274,16 +391,12 @@ async function generateSinglePortrait(orderId: string, portraitId: string) {
     data: {
       status: PortraitStatus.GENERATING,
       resolvedPrompt: prompt,
+      retryCount: 0,
+      failureReason: null,
     },
   });
 
-  const references: ReferencePhoto[] = [];
-  for (const photo of portrait.order.pet.photos) {
-    const image = await getObjectBuffer(photo.processedKey ?? photo.originalKey).catch(() => null);
-    if (image) {
-      references.push({ buffer: image, mimeType: "image/png" });
-    }
-  }
+  const references = await loadReferences(portrait.order.pet.photos);
 
   let output: Buffer | null = null;
   let failureReason = "";
@@ -292,7 +405,9 @@ async function generateSinglePortrait(orderId: string, portraitId: string) {
     try {
       if (gemini) {
         output = await generateViaGemini(
-          attempt === 0 ? prompt : `${prompt}\n\nRETRY NOTE: The previous attempt did not match the reference photos closely enough. Pay extra attention to the pet's exact ear position, ear shape, face structure, and markings. The reference photos are the authority — do not let artistic style override anatomy.`,
+          attempt === 0
+            ? prompt
+            : `${prompt}\n\nRETRY NOTE: The previous attempt did not match the reference photos closely enough. Pay extra attention to the pet's exact ear position, ear shape, face structure, and markings. The reference photos are the authority — do not let artistic style override anatomy.`,
           references,
         );
       } else if (env.ENABLE_DEMO_GENERATION) {
@@ -313,10 +428,7 @@ async function generateSinglePortrait(orderId: string, portraitId: string) {
   if (!output) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: {
-        status: PortraitStatus.FAILED,
-        failureReason,
-      },
+      data: { status: PortraitStatus.FAILED, failureReason },
     });
     return;
   }
@@ -339,25 +451,23 @@ async function generateSinglePortrait(orderId: string, portraitId: string) {
   });
 }
 
+/* ── Order-level generation orchestration ────────────────── */
+
 async function applyRefund(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { portraits: true },
+    include: { portraits: true, addOns: true },
   });
 
   if (!order || !stripe || !order.stripePaymentId) {
     return;
   }
 
-  const failedCount = order.portraits.filter((portrait) => portrait.status === PortraitStatus.FAILED).length;
-  if (!failedCount) {
-    return;
-  }
-
-  const refundAmount =
-    failedCount === order.portraits.length
-      ? order.amount
-      : Math.round((order.amount / order.portraits.length) * failedCount);
+  const refundAmount = calculateFailedOrderRefund({
+    amount: order.amount,
+    portraits: order.portraits,
+    addOns: order.addOns,
+  });
 
   if (refundAmount <= 0) {
     return;
@@ -365,20 +475,21 @@ async function applyRefund(orderId: string) {
 
   await stripe.refunds.create({
     payment_intent: order.stripePaymentId,
-    amount: refundAmount,
+    amount: Math.min(refundAmount, order.amount),
   });
 }
 
+/**
+ * Start generation for a new order.
+ * - Preview flow: only generates the 3 preview styles (cheap model, low-res).
+ * - Legacy flow: generates all portraits at full quality.
+ */
 export async function startOrderGeneration(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
       user: true,
-      pet: {
-        include: {
-          photos: true,
-        },
-      },
+      pet: { include: { photos: true } },
       portraits: true,
     },
   });
@@ -387,23 +498,49 @@ export async function startOrderGeneration(orderId: string) {
     return;
   }
 
+  const isPreviewFlow = order.status === OrderStatus.PREVIEW;
+
   await prisma.order.update({
     where: { id: orderId },
-    data: { status: OrderStatus.GENERATING },
+    data: { status: isPreviewFlow ? OrderStatus.PREVIEW : OrderStatus.GENERATING },
   });
 
+  if (isPreviewFlow) {
+    // Only generate the 3 preview styles with the cheap model
+    const previewStyleSet = new Set<string>(PREVIEW_STYLES);
+    const previewPortraits = order.portraits.filter((p) => previewStyleSet.has(p.style));
+
+    await Promise.all(
+      previewPortraits.map((portrait) =>
+        semaphore.use(() => generatePreviewPortrait(orderId, portrait.id)),
+      ),
+    );
+
+    const completedCount = (
+      await prisma.portrait.findMany({
+        where: { orderId, style: { in: PREVIEW_STYLES } },
+      })
+    ).filter((p) => p.status === PortraitStatus.COMPLETED).length;
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: completedCount > 0 ? OrderStatus.PREVIEWS_READY : OrderStatus.FAILED,
+      },
+    });
+    return;
+  }
+
+  // Legacy flow: generate all portraits at full quality
   await Promise.all(
     order.portraits.map((portrait) =>
-      semaphore.use(() => generateSinglePortrait(orderId, portrait.id)),
+      semaphore.use(() => generateFullQualityPortrait(orderId, portrait.id)),
     ),
   );
 
   const refreshed = await prisma.order.findUniqueOrThrow({
     where: { id: orderId },
-    include: {
-      user: true,
-      portraits: true,
-    },
+    include: { user: true, portraits: true },
   });
 
   const completedCount = refreshed.portraits.filter(
@@ -415,10 +552,7 @@ export async function startOrderGeneration(orderId: string) {
     data: {
       status: completedCount > 0 ? OrderStatus.COMPLETED : OrderStatus.FAILED,
     },
-    include: {
-      user: true,
-      portraits: true,
-    },
+    include: { user: true, portraits: true },
   });
 
   await applyRefund(orderId);
@@ -428,6 +562,122 @@ export async function startOrderGeneration(orderId: string) {
     if (updatedOrder.isGift && updatedOrder.giftToken) {
       await sendGiftNotificationEmail(updatedOrder, updatedOrder.user.name ?? updatedOrder.user.email, updatedOrder.portraits);
       await sendGiftSentConfirmationEmail(updatedOrder.user, updatedOrder);
+    }
+  }
+}
+
+/**
+ * After payment: generate full-quality assets for all selected portraits.
+ * Re-generates preview portraits at full quality; generates locked ones from scratch.
+ */
+export async function startPostPaymentGeneration(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: true,
+      pet: { include: { photos: true } },
+      portraits: true,
+    },
+  });
+
+  if (!order) return;
+
+  const selectedPortraits = order.portraits.filter((p) => p.selected);
+  if (selectedPortraits.length === 0) return;
+
+  // Reset selected portraits to PENDING so they re-generate at full quality
+  await prisma.portrait.updateMany({
+    where: {
+      id: { in: selectedPortraits.map((p) => p.id) },
+    },
+    data: {
+      status: PortraitStatus.PENDING,
+      fullUrl: null,
+      fullKey: null,
+      printReadyUrl: null,
+      printReadyKey: null,
+      retryCount: 0,
+      failureReason: null,
+    },
+  });
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.GENERATING },
+  });
+
+  await Promise.all(
+    selectedPortraits.map((portrait) =>
+      semaphore.use(() => generateFullQualityPortrait(orderId, portrait.id)),
+    ),
+  );
+
+  // Generate add-ons after portraits complete (letter needs a portrait for header)
+  await generateOrderAddOns(orderId);
+
+  const refreshed = await prisma.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: { user: true, portraits: true, addOns: true },
+  });
+
+  const completedSelected = refreshed.portraits
+    .filter((p) => p.selected)
+    .filter((p) => p.status === PortraitStatus.COMPLETED).length;
+
+  const allAddOnsDone = refreshed.addOns.every(
+    (a) => a.status === "COMPLETED" || a.status === "FAILED",
+  );
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: completedSelected > 0 && allAddOnsDone ? OrderStatus.COMPLETED : OrderStatus.FAILED,
+    },
+    include: { user: true, portraits: true },
+  });
+
+  await applyRefund(orderId);
+
+  if (completedSelected > 0) {
+    await sendPortraitsReadyEmail(updatedOrder.user, updatedOrder, updatedOrder.portraits);
+    if (updatedOrder.isGift && updatedOrder.giftToken) {
+      await sendGiftNotificationEmail(updatedOrder, updatedOrder.user.name ?? updatedOrder.user.email, updatedOrder.portraits);
+      await sendGiftSentConfirmationEmail(updatedOrder.user, updatedOrder);
+    }
+  }
+}
+
+/**
+ * Generate all pending add-ons (Letter From Heaven, Storybook) for an order.
+ * Called after portraits finish so letter can use a portrait as header.
+ */
+async function generateOrderAddOns(orderId: string) {
+  const addOns = await prisma.orderAddOn.findMany({
+    where: { orderId, status: "PENDING" },
+  });
+
+  for (const addOn of addOns) {
+    try {
+      await prisma.orderAddOn.update({
+        where: { id: addOn.id },
+        data: { status: "GENERATING" },
+      });
+
+      if (addOn.type === "LETTER_FROM_HEAVEN") {
+        const { generateLetter } = await import("./letter-generation.js");
+        await generateLetter(orderId, addOn.id);
+      } else if (addOn.type === "STORYBOOK") {
+        const { generateStorybook } = await import("./storybook-generation.js");
+        await generateStorybook(orderId, addOn.id);
+      }
+    } catch (error) {
+      await prisma.orderAddOn.update({
+        where: { id: addOn.id },
+        data: {
+          status: "FAILED",
+          failureReason: error instanceof Error ? error.message : "Unknown failure",
+        },
+      });
     }
   }
 }
@@ -454,15 +704,13 @@ export async function handlePaidOrder(orderId: string, stripePaymentId?: string 
     });
   }
 
-  const nextStatus =
-    existingOrder.status === OrderStatus.COMPLETED || existingOrder.status === OrderStatus.FAILED
-      ? existingOrder.status
-      : OrderStatus.PAID;
+  // For CUSTOM orders: mark as PAID then kick off full-quality generation
+  const isCustomFlow = existingOrder.packageType === PackageType.CUSTOM;
 
   const order = await prisma.order.update({
     where: { id: orderId },
     data: {
-      status: nextStatus,
+      status: OrderStatus.PAID,
       stripePaymentId: stripePaymentId ?? undefined,
       stripeSessionId: stripeSessionId ?? undefined,
     },
@@ -472,6 +720,16 @@ export async function handlePaidOrder(orderId: string, stripePaymentId?: string 
     },
   });
 
+  if (isCustomFlow) {
+    // Trigger full-quality generation async — user will see progress on order page
+    await sendOrderConfirmationEmail(order.user, order);
+    setTimeout(() => {
+      void startPostPaymentGeneration(orderId);
+    }, 0);
+    return;
+  }
+
+  // Legacy flow
   const hasFinishedPortraits = order.portraits.some((portrait) => portrait.status === PortraitStatus.COMPLETED);
   const hasPendingGeneration = order.portraits.some(
     (portrait) => portrait.status === PortraitStatus.PENDING || portrait.status === PortraitStatus.GENERATING,
@@ -496,6 +754,7 @@ export function getPackagePortraitCount(packageType: PackageType) {
     case PackageType.MEMORIAL:
       return 5;
     case PackageType.PREMIUM:
+    case PackageType.CUSTOM:
       return 10;
   }
 }
