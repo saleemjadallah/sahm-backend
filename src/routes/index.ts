@@ -21,7 +21,7 @@ import { createPrintGuidePdf } from "../lib/print-guide.js";
 import { getObjectBuffer, uploadBuffer, deleteObject } from "../lib/storage.js";
 import { verifyPrintfulWebhookSignature } from "../lib/printful-webhook.js";
 import { stripe } from "../lib/stripe.js";
-import { handlePaidOrder } from "../services/generation.js";
+import { customOrderNeedsPostPaymentFulfillment, handlePaidOrder, startPostPaymentGeneration } from "../services/generation.js";
 import { isPrintfulConfigured, estimateShipping } from "../services/printful.js";
 import { submitPaidPrintOrder } from "../services/printful-orders.js";
 
@@ -708,7 +708,68 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Order not found.");
     }
 
+    if (
+      orderIsPaid(order) &&
+      order.packageType === PackageType.CUSTOM &&
+      order.status !== OrderStatus.GENERATING &&
+      customOrderNeedsPostPaymentFulfillment(order)
+    ) {
+      setTimeout(() => {
+        void startPostPaymentGeneration(order.id);
+      }, 0);
+    }
+
     return serializeOrder(order);
+  });
+
+  app.post("/api/orders/:id/reconcile-checkout", async (request) => {
+    const user = requireUser(request);
+    const { id } = request.params as { id: string };
+    const body = request.body as { sessionId?: string };
+    const sessionId = body.sessionId?.trim();
+
+    const order = await prisma.order.findFirst({
+      where: { id, userId: user.id },
+      select: {
+        id: true,
+        stripePaymentId: true,
+        stripeSessionId: true,
+      },
+    });
+
+    if (!order) {
+      throw createError(404, "Order not found.");
+    }
+
+    if (orderIsPaid(order)) {
+      return { reconciled: true, isPaid: true };
+    }
+
+    if (!sessionId) {
+      throw createError(400, "A checkout session ID is required.");
+    }
+
+    if (!stripe) {
+      return { reconciled: false, isPaid: false };
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.metadata?.orderId !== order.id) {
+      throw createError(400, "Checkout session does not belong to this order.");
+    }
+
+    if (order.stripeSessionId && order.stripeSessionId !== session.id) {
+      throw createError(400, "Checkout session does not match the saved order session.");
+    }
+
+    if (session.payment_status !== "paid") {
+      return { reconciled: false, isPaid: false };
+    }
+
+    const paymentIntent = typeof session.payment_intent === "string" ? session.payment_intent : null;
+    await handlePaidOrder(order.id, paymentIntent, session.id);
+
+    return { reconciled: true, isPaid: true };
   });
 
   app.post("/api/checkout/create-session", async (request) => {
@@ -1047,7 +1108,7 @@ export function registerRoutes(app: FastifyInstance) {
     reply.header("Content-Type", ext === "pdf" ? "application/pdf" : "image/png");
     reply.header(
       "Content-Disposition",
-      `attachment; filename="${normalizeFilename(order.petName, "pet")}-${label}.${ext}"`,
+      `${ext === "pdf" ? "inline" : "attachment"}; filename="${normalizeFilename(order.petName, "pet")}-${label}.${ext}"`,
     );
     return reply.send(buffer);
   });

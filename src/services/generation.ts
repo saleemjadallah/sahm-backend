@@ -1,7 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import {
+  AddOnStatus,
   OrderStatus,
   PackageType,
+  Prisma,
   PortraitStatus,
   PortraitStyle,
   type Portrait,
@@ -31,6 +33,21 @@ const gemini = env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: env.GEMINI_API_KEY
 const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
 
 const previewModel = env.GEMINI_PREVIEW_MODEL || env.GEMINI_IMAGE_MODEL;
+
+type PaidFulfillmentPortrait = {
+  selected: boolean;
+  status: PortraitStatus;
+  fullUrl?: string | null;
+  fullKey?: string | null;
+  printReadyUrl?: string | null;
+  printReadyKey?: string | null;
+};
+
+type PaidFulfillmentAddOn = {
+  status: AddOnStatus | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+  documentUrl?: string | null;
+  documentKey?: string | null;
+};
 
 const ANATOMICAL_FIDELITY = [
   "CRITICAL — Anatomical fidelity must override stylistic conventions:",
@@ -257,6 +274,60 @@ async function uploadPortraitAssets(orderId: string, portraitId: string, buffers
   ]);
 
   return { preview, full, printReady };
+}
+
+export function portraitHasPaidAssets(portrait: PaidFulfillmentPortrait) {
+  return (
+    portrait.status === PortraitStatus.COMPLETED &&
+    Boolean(portrait.fullUrl && portrait.fullKey && portrait.printReadyUrl && portrait.printReadyKey)
+  );
+}
+
+export function addOnHasPaidAssets(addOn: PaidFulfillmentAddOn) {
+  return addOn.status === AddOnStatus.COMPLETED && Boolean(addOn.documentUrl && addOn.documentKey);
+}
+
+export function customOrderNeedsPostPaymentFulfillment(order: {
+  packageType: PackageType;
+  portraits: PaidFulfillmentPortrait[];
+  addOns: PaidFulfillmentAddOn[];
+}) {
+  if (order.packageType !== PackageType.CUSTOM) {
+    return false;
+  }
+
+  const selectedPortraits = order.portraits.filter((portrait) => portrait.selected);
+  if (selectedPortraits.length === 0) {
+    return false;
+  }
+
+  const portraitsNeedGeneration = selectedPortraits.some(
+    (portrait) => portrait.status !== PortraitStatus.FAILED && !portraitHasPaidAssets(portrait),
+  );
+  const addOnsNeedGeneration = order.addOns.some(
+    (addOn) => addOn.status !== AddOnStatus.FAILED && !addOnHasPaidAssets(addOn),
+  );
+
+  return portraitsNeedGeneration || addOnsNeedGeneration;
+}
+
+function customOrderFulfillmentDone(order: {
+  portraits: PaidFulfillmentPortrait[];
+  addOns: PaidFulfillmentAddOn[];
+}) {
+  const selectedPortraits = order.portraits.filter((portrait) => portrait.selected);
+  if (selectedPortraits.length === 0) {
+    return false;
+  }
+
+  const allPortraitsDone = selectedPortraits.every(
+    (portrait) => portrait.status === PortraitStatus.FAILED || portraitHasPaidAssets(portrait),
+  );
+  const allAddOnsDone = order.addOns.every(
+    (addOn) => addOn.status === AddOnStatus.FAILED || addOnHasPaidAssets(addOn),
+  );
+
+  return allPortraitsDone && allAddOnsDone;
 }
 
 /* ── Portrait generators ─────────────────────────────────── */
@@ -566,6 +637,7 @@ export async function startPostPaymentGeneration(orderId: string) {
       user: true,
       pet: { include: { photos: true } },
       portraits: true,
+      addOns: true,
     },
   });
 
@@ -574,35 +646,81 @@ export async function startPostPaymentGeneration(orderId: string) {
   const selectedPortraits = order.portraits.filter((p) => p.selected);
   if (selectedPortraits.length === 0) return;
 
-  // Reset selected portraits to PENDING so they re-generate at full quality
-  await prisma.portrait.updateMany({
-    where: {
-      id: { in: selectedPortraits.map((p) => p.id) },
-    },
-    data: {
-      status: PortraitStatus.PENDING,
-      fullUrl: null,
-      fullKey: null,
-      printReadyUrl: null,
-      printReadyKey: null,
-      retryCount: 0,
-      failureReason: null,
-    },
-  });
+  const portraitsToGenerate = selectedPortraits.filter(
+    (portrait) => portrait.status !== PortraitStatus.FAILED && !portraitHasPaidAssets(portrait),
+  );
+  const addOnsToGenerate = order.addOns.filter(
+    (addOn) => addOn.status !== AddOnStatus.FAILED && !addOnHasPaidAssets(addOn),
+  );
+
+  if (portraitsToGenerate.length === 0 && addOnsToGenerate.length === 0) {
+    if (order.status !== OrderStatus.COMPLETED && customOrderFulfillmentDone(order)) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: selectedPortraits.some((portrait) => portraitHasPaidAssets(portrait))
+            ? OrderStatus.COMPLETED
+            : OrderStatus.FAILED,
+        },
+      });
+    }
+    return;
+  }
+
+  if (portraitsToGenerate.length > 0) {
+    // Reset incomplete selected portraits to PENDING so they regenerate at paid quality.
+    await prisma.portrait.updateMany({
+      where: {
+        id: { in: portraitsToGenerate.map((portrait) => portrait.id) },
+      },
+      data: {
+        status: PortraitStatus.PENDING,
+        fullUrl: null,
+        fullKey: null,
+        printReadyUrl: null,
+        printReadyKey: null,
+        retryCount: 0,
+        failureReason: null,
+      },
+    });
+  }
+
+  if (addOnsToGenerate.length > 0) {
+    await prisma.orderAddOn.updateMany({
+      where: {
+        id: { in: addOnsToGenerate.map((addOn) => addOn.id) },
+      },
+      data: {
+        status: AddOnStatus.PENDING,
+        documentUrl: null,
+        documentKey: null,
+        previewUrl: null,
+        previewKey: null,
+        generatedText: null,
+        metadata: Prisma.JsonNull,
+        failureReason: null,
+        retryCount: 0,
+      },
+    });
+  }
 
   await prisma.order.update({
     where: { id: orderId },
     data: { status: OrderStatus.GENERATING },
   });
 
-  await Promise.all(
-    selectedPortraits.map((portrait) =>
-      semaphore.use(() => generateFullQualityPortrait(orderId, portrait.id)),
-    ),
-  );
+  if (portraitsToGenerate.length > 0) {
+    await Promise.all(
+      portraitsToGenerate.map((portrait) =>
+        semaphore.use(() => generateFullQualityPortrait(orderId, portrait.id)),
+      ),
+    );
+  }
 
   // Generate add-ons after portraits complete (letter needs a portrait for header)
-  await generateOrderAddOns(orderId);
+  if (addOnsToGenerate.length > 0) {
+    await generateOrderAddOns(orderId);
+  }
 
   const refreshed = await prisma.order.findUniqueOrThrow({
     where: { id: orderId },
@@ -611,23 +729,25 @@ export async function startPostPaymentGeneration(orderId: string) {
 
   const completedSelected = refreshed.portraits
     .filter((p) => p.selected)
-    .filter((p) => p.status === PortraitStatus.COMPLETED).length;
-
-  const allAddOnsDone = refreshed.addOns.every(
-    (a) => a.status === "COMPLETED" || a.status === "FAILED",
-  );
+    .filter((portrait) => portraitHasPaidAssets(portrait)).length;
+  const fulfillmentComplete = customOrderFulfillmentDone(refreshed);
+  const nextStatus = fulfillmentComplete
+    ? completedSelected > 0
+      ? OrderStatus.COMPLETED
+      : OrderStatus.FAILED
+    : OrderStatus.GENERATING;
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data: {
-      status: completedSelected > 0 && allAddOnsDone ? OrderStatus.COMPLETED : OrderStatus.FAILED,
+      status: nextStatus,
     },
     include: { user: true, portraits: true },
   });
 
   await applyRefund(orderId);
 
-  if (completedSelected > 0) {
+  if (nextStatus === OrderStatus.COMPLETED && refreshed.status !== OrderStatus.COMPLETED && completedSelected > 0) {
     await sendPortraitsReadyEmail(updatedOrder.user, updatedOrder, updatedOrder.portraits);
     if (updatedOrder.isGift && updatedOrder.giftToken) {
       await sendGiftNotificationEmail(updatedOrder, updatedOrder.user.name ?? updatedOrder.user.email, updatedOrder.portraits);
@@ -677,14 +797,17 @@ export async function handlePaidOrder(orderId: string, stripePaymentId?: string 
     include: {
       user: true,
       portraits: true,
+      addOns: true,
     },
   });
 
-  if (!existingOrder || existingOrder.stripePaymentId) {
+  if (!existingOrder) {
     return;
   }
 
-  if (existingOrder.promoCode) {
+  const alreadyPaid = Boolean(existingOrder.stripePaymentId);
+
+  if (!alreadyPaid && existingOrder.promoCode) {
     await prisma.promoCode.update({
       where: { code: existingOrder.promoCode },
       data: {
@@ -696,25 +819,33 @@ export async function handlePaidOrder(orderId: string, stripePaymentId?: string 
   // For CUSTOM orders: mark as PAID then kick off full-quality generation
   const isCustomFlow = existingOrder.packageType === PackageType.CUSTOM;
 
-  const order = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: OrderStatus.PAID,
-      stripePaymentId: stripePaymentId ?? undefined,
-      stripeSessionId: stripeSessionId ?? undefined,
-    },
-    include: {
-      user: true,
-      portraits: true,
-    },
-  });
+  const order = alreadyPaid
+    ? existingOrder
+    : await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.PAID,
+          stripePaymentId: stripePaymentId ?? undefined,
+          stripeSessionId: stripeSessionId ?? undefined,
+        },
+        include: {
+          user: true,
+          portraits: true,
+          addOns: true,
+        },
+      });
 
   if (isCustomFlow) {
-    // Trigger full-quality generation async — user will see progress on order page
-    await sendOrderConfirmationEmail(order.user, order);
-    setTimeout(() => {
-      void startPostPaymentGeneration(orderId);
-    }, 0);
+    if (!alreadyPaid) {
+      await sendOrderConfirmationEmail(order.user, order);
+    }
+
+    if (customOrderNeedsPostPaymentFulfillment(order)) {
+      // Trigger full-quality generation async — user will see progress on order page
+      setTimeout(() => {
+        void startPostPaymentGeneration(orderId);
+      }, 0);
+    }
     return;
   }
 
