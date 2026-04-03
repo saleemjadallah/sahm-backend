@@ -11,7 +11,7 @@ const gemini = env.GEMINI_API_KEY
   : null;
 const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
 
-const STORYBOOK_IMAGE_MODEL = "gemini-2.0-flash-exp";
+const STORYBOOK_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 type ReferencePhoto = { mimeType: string; buffer: Buffer };
 
