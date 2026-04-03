@@ -1270,10 +1270,18 @@ export function registerRoutes(app: FastifyInstance) {
         {
           price_data: {
             currency: "usd",
-            product_data: {
-              name: `${body.productType === "FRAMED_POSTER" ? "Framed Print" : body.productType === "CANVAS" ? "Canvas" : "Framed Canvas"} (${body.size})`,
-              description: `Memorial portrait for ${portrait.order.petName}`,
-            },
+            ...((() => {
+              const productMap: Record<string, string> = {
+                FRAMED_POSTER: env.STRIPE_PRODUCT_FRAMED_PRINT,
+                CANVAS: env.STRIPE_PRODUCT_CANVAS,
+                FRAMED_CANVAS: env.STRIPE_PRODUCT_FRAMED_CANVAS,
+              };
+              const productId = productMap[body.productType];
+              const label = `${body.productType === "FRAMED_POSTER" ? "Framed Print" : body.productType === "CANVAS" ? "Canvas" : "Framed Canvas"} (${body.size})`;
+              return productId
+                ? { product: productId }
+                : { product_data: { name: label, description: `Memorial portrait for ${portrait.order.petName}` } };
+            })()),
             unit_amount: retailPrice,
           },
           quantity: 1,
@@ -1283,7 +1291,9 @@ export function registerRoutes(app: FastifyInstance) {
               {
                 price_data: {
                   currency: "usd",
-                  product_data: { name: "Shipping" },
+                  ...(env.STRIPE_PRODUCT_SHIPPING
+                    ? { product: env.STRIPE_PRODUCT_SHIPPING }
+                    : { product_data: { name: "Shipping" } }),
                   unit_amount: shippingCost,
                 },
                 quantity: 1,
