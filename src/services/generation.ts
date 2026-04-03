@@ -34,6 +34,15 @@ const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
 
 const previewModel = env.GEMINI_PREVIEW_MODEL || env.GEMINI_IMAGE_MODEL;
 
+function orderHasPaidAccess(order: { stripePaymentId: string | null; status: OrderStatus }) {
+  return (
+    Boolean(order.stripePaymentId) ||
+    order.status === OrderStatus.PAID ||
+    order.status === OrderStatus.GENERATING ||
+    order.status === OrderStatus.COMPLETED
+  );
+}
+
 type PaidFulfillmentPortrait = {
   selected: boolean;
   status: PortraitStatus;
@@ -617,7 +626,7 @@ export async function startOrderGeneration(orderId: string) {
 
   await applyRefund(orderId);
 
-  if (completedCount > 0 && updatedOrder.stripePaymentId) {
+  if (completedCount > 0 && orderHasPaidAccess(updatedOrder)) {
     await sendPortraitsReadyEmail(updatedOrder.user, updatedOrder, updatedOrder.portraits);
     if (updatedOrder.isGift && updatedOrder.giftToken) {
       await sendGiftNotificationEmail(updatedOrder, updatedOrder.user.name ?? updatedOrder.user.email, updatedOrder.portraits);

@@ -83,12 +83,17 @@ function normalizeFilename(input: string | undefined, fallback: string) {
   return (input ?? fallback).replace(/[^a-z0-9._-]+/gi, "-").toLowerCase();
 }
 
-function orderIsPaid(order: { stripePaymentId: string | null }) {
-  return Boolean(order.stripePaymentId);
+function orderHasPaidStatus(status: OrderStatus) {
+  return status === OrderStatus.PAID || status === OrderStatus.GENERATING || status === OrderStatus.COMPLETED;
+}
+
+function orderIsPaid(order: { stripePaymentId: string | null; status: OrderStatus }) {
+  return Boolean(order.stripePaymentId) || orderHasPaidStatus(order.status);
 }
 
 function serializeOrder<T extends {
   stripePaymentId: string | null;
+  status: OrderStatus;
   packageType: PackageType;
   portraits: Array<{
     id: string;
@@ -647,7 +652,7 @@ export function registerRoutes(app: FastifyInstance) {
     });
 
     if (!order) throw createError(404, "Order not found.");
-    if (order.stripePaymentId) throw createError(400, "Order is already paid.");
+    if (orderIsPaid(order)) throw createError(400, "Order is already paid.");
     if (order.status !== OrderStatus.PREVIEWS_READY) {
       throw createError(400, "Order must be in preview state before finalizing.");
     }
@@ -732,6 +737,7 @@ export function registerRoutes(app: FastifyInstance) {
       where: { id, userId: user.id },
       select: {
         id: true,
+        status: true,
         stripePaymentId: true,
         stripeSessionId: true,
       },
@@ -990,6 +996,7 @@ export function registerRoutes(app: FastifyInstance) {
         order: {
           select: {
             stripePaymentId: true,
+            status: true,
             packageType: true,
           },
         },
@@ -1000,7 +1007,7 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(404, "Portrait not found.");
     }
 
-    if (!portrait.order.stripePaymentId && variant !== "preview") {
+    if (!orderIsPaid(portrait.order) && variant !== "preview") {
       throw createError(402, "Payment is required to download high-resolution files.");
     }
 
@@ -1140,7 +1147,13 @@ export function registerRoutes(app: FastifyInstance) {
   app.get("/api/gift/:token", async (request) => {
     const { token } = request.params as { token: string };
     const order = await prisma.order.findFirst({
-      where: { giftToken: token, stripePaymentId: { not: null } },
+      where: {
+        giftToken: token,
+        OR: [
+          { stripePaymentId: { not: null } },
+          { status: { in: [OrderStatus.PAID, OrderStatus.GENERATING, OrderStatus.COMPLETED] } },
+        ],
+      },
       include: orderSelect(),
     });
 
@@ -1194,7 +1207,7 @@ export function registerRoutes(app: FastifyInstance) {
       include: { order: true },
     });
     if (!portrait) throw createError(404, "Portrait not found.");
-    if (!portrait.order.stripePaymentId) throw createError(402, "Portrait order must be paid first.");
+    if (!orderIsPaid(portrait.order)) throw createError(402, "Portrait order must be paid first.");
     if (!portrait.printReadyKey) throw createError(400, "Print-ready file is not available yet.");
 
     const frame = requiresFrame(body.productType) ? (body.frameColor ?? "black") : "none";
@@ -1261,7 +1274,7 @@ export function registerRoutes(app: FastifyInstance) {
       include: { order: true },
     });
     if (!portrait) throw createError(404, "Portrait not found.");
-    if (!portrait.order.stripePaymentId) throw createError(402, "Portrait order must be paid first.");
+    if (!orderIsPaid(portrait.order)) throw createError(402, "Portrait order must be paid first.");
     if (!portrait.printReadyKey) throw createError(400, "Print-ready file is not available yet.");
 
     const frame = requiresFrame(body.productType) ? (body.frameColor ?? "black") : "none";
