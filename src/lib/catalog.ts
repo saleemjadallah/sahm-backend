@@ -209,11 +209,18 @@ export function calculatePrice(count: number): number {
   return getUnitPrice(count) * count;
 }
 
-/** The 3 most compelling styles generated as free previews (cheap model, low res). */
+/** All standard styles generated as free previews (cheap model, low res, watermarked). */
 export const PREVIEW_STYLES: PortraitStyle[] = [
   PortraitStyle.WATERCOLOR,
-  PortraitStyle.RAINBOW_BRIDGE,
+  PortraitStyle.OIL_PAINTING,
   PortraitStyle.RENAISSANCE,
+  PortraitStyle.RAINBOW_BRIDGE,
+  PortraitStyle.PENCIL_SKETCH,
+  PortraitStyle.POP_ART,
+  PortraitStyle.STAINED_GLASS,
+  PortraitStyle.IMPRESSIONIST,
+  PortraitStyle.ANIME,
+  PortraitStyle.MINIMALIST,
 ];
 
 export const MEMORIAL_CURATED_STYLES: PortraitStyle[] = [

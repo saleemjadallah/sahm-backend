@@ -481,7 +481,7 @@ async function applyRefund(orderId: string) {
 
 /**
  * Start generation for a new order.
- * - Preview flow: only generates the 3 preview styles (cheap model, low-res).
+ * - Preview flow: generates all standard styles as previews (cheap model, low-res, watermarked).
  * - Legacy flow: generates all portraits at full quality.
  */
 export async function startOrderGeneration(orderId: string) {
@@ -506,7 +506,7 @@ export async function startOrderGeneration(orderId: string) {
   });
 
   if (isPreviewFlow) {
-    // Only generate the 3 preview styles with the cheap model
+    // Generate all standard styles as previews with the cheap model
     const previewStyleSet = new Set<string>(PREVIEW_STYLES);
     const previewPortraits = order.portraits.filter((p) => previewStyleSet.has(p.style));
 
