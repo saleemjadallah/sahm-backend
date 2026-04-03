@@ -227,20 +227,9 @@ async function renderPortraitAssets(source: Buffer) {
     .png()
     .toBuffer();
 
-  const previewBase = await sharp(full)
+  // Full-quality preview: no watermark (user has already paid)
+  const preview = await sharp(full)
     .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
-    .png()
-    .toBuffer();
-
-  const previewWatermark = `
-    <svg width="1200" height="1200" viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="1020" width="1200" height="180" fill="rgba(61,61,61,0.46)"/>
-      <text x="600" y="1110" text-anchor="middle" font-size="54" font-family="Arial, sans-serif" fill="rgba(255,255,255,0.96)">Preview • Unlock high-resolution download</text>
-    </svg>
-  `;
-
-  const preview = await sharp(previewBase)
-    .composite([{ input: Buffer.from(previewWatermark) }])
     .png()
     .toBuffer();
 
