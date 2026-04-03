@@ -843,14 +843,19 @@ export function registerRoutes(app: FastifyInstance) {
     return { checkoutUrl: session.url };
   });
 
-  app.post(
-    "/api/webhooks/stripe",
-    {
-      config: {
-        rawBody: true,
+  // Stripe webhook in its own scope — needs raw body for signature verification,
+  // so we replace the JSON parser with a raw string parser in this scope only.
+  app.register(async (scope) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      (_req: FastifyRequest, body: string, done: (err: null, result: string) => void) => {
+        done(null, body);
       },
-    },
-    async (request, reply) => {
+    );
+
+    scope.post("/api/webhooks/stripe", async (request, reply) => {
       if (!stripe || !env.STRIPE_WEBHOOK_SECRET) {
         return { received: true };
       }
@@ -860,7 +865,7 @@ export function registerRoutes(app: FastifyInstance) {
         throw createError(400, "Missing Stripe signature.");
       }
 
-      const payload = typeof request.rawBody === "string" ? request.rawBody : request.rawBody?.toString("utf8") ?? "";
+      const payload = request.body as string;
       let event: Stripe.Event;
       try {
         event = stripe.webhooks.constructEvent(payload, signature, env.STRIPE_WEBHOOK_SECRET);
@@ -886,8 +891,8 @@ export function registerRoutes(app: FastifyInstance) {
       }
 
       return { received: true };
-    },
-  );
+    });
+  });
 
   app.get("/api/orders/:orderId/portraits", async (request) => {
     const user = requireUser(request);
