@@ -29,9 +29,14 @@ type ReferencePhoto = {
 const gemini = env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: env.GEMINI_API_KEY }) : null;
 const semaphore = new Semaphore(env.GEMINI_MAX_CONCURRENT);
 
+const ANATOMICAL_FIDELITY = [
+  "CRITICAL — Anatomical fidelity must override stylistic conventions:",
+  "Study the uploaded reference photos before generating. The pet's exact ear position (erect, semi-erect, floppy, rose-shaped), ear shape, face shape, muzzle length, body proportions, coat texture, and markings MUST be faithfully reproduced.",
+  "Do NOT default to breed stereotypes or art-style conventions for anatomy. If the reference photos show upright ears, the portrait must show upright ears regardless of what is typical for classical paintings of dogs.",
+  "The reference photos are the single source of truth for the pet's physical appearance. Artistic style applies to rendering technique (brushwork, color, texture, lighting) — never to the pet's anatomy.",
+];
+
 const SHARED_PROMPT_GUARDRAILS = [
-  "Preserve the pet's actual likeness from the uploaded reference photos.",
-  "Match face shape, ear shape, coat pattern, markings, muzzle, nose, eye color, and overall body proportions carefully.",
   "Capture warmth and dignity appropriate for a memorial portrait, not a novelty image.",
   "Render a finished artwork that feels premium, frame-worthy, and emotionally appropriate for a sympathy gift.",
   "Keep the subject singular and clear with no extra pets, no extra humans, and no duplicate limbs or facial features.",
@@ -59,7 +64,10 @@ function buildPrompt(
     "",
     "Subject:",
     `Create a ${style.label} memorial portrait of ${input.petName}, a ${breedLabel}${input.type.toLowerCase()}.`,
-    details ? `Special identity details to preserve: ${details}.` : "",
+    details ? `Key identity details to preserve: ${details}.` : "",
+    "",
+    "Anatomical Fidelity (HIGHEST PRIORITY):",
+    ...ANATOMICAL_FIDELITY.map((line) => `- ${line}`),
     "",
     "Style Direction:",
     style.guidance,
@@ -284,7 +292,7 @@ async function generateSinglePortrait(orderId: string, portraitId: string) {
     try {
       if (gemini) {
         output = await generateViaGemini(
-          attempt === 0 ? prompt : `${prompt} Preserve likeness even more faithfully and keep the expression serene.`,
+          attempt === 0 ? prompt : `${prompt}\n\nRETRY NOTE: The previous attempt did not match the reference photos closely enough. Pay extra attention to the pet's exact ear position, ear shape, face structure, and markings. The reference photos are the authority — do not let artistic style override anatomy.`,
           references,
         );
       } else if (env.ENABLE_DEMO_GENERATION) {

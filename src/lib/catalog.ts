@@ -32,14 +32,14 @@ export const STYLE_DEFINITIONS: Record<PortraitStyle, StyleDefinition> = {
     label: "Oil Painting",
     shortDescription: "Classical portraiture with rich brushwork and warm light.",
     guidance:
-      "Rich classical oil painting with visible brushstrokes, deep shadows, warm golden lighting, and a dark muted old-masters background.",
-    emotionalTone: "dignified, noble, and timeless",
-    composition: "formal chest-up or three-quarter portrait with poised posture",
+      "Rich classical oil painting with visible brushstrokes, deep shadows, warm golden lighting, and a dark muted background. Apply the oil-painting technique to color, texture, and light — but reproduce the pet's exact anatomy (ear position, face shape, muzzle, proportions) precisely from the reference photos. Do not default to hunting-dog or hound anatomy from classical painting conventions.",
+    emotionalTone: "dignified, warm, and timeless",
+    composition: "formal chest-up or three-quarter portrait, preserving the pet's natural ear position and posture as seen in the reference photos",
     background: "deep painterly background in warm neutrals and muted browns",
     lighting: "directional golden museum-style light with dimensional shadow",
     textTreatment: "if memorial text is used, treat it like a discreet signature plate",
     negativeGuidance:
-      "avoid modern props, cartoon styling, flat lighting, noisy detail, duplicate limbs, and theatrical over-saturation",
+      "avoid altering the pet's ear position or face shape to match classical painting conventions, avoid modern props, cartoon styling, flat lighting, noisy detail, duplicate limbs, and theatrical over-saturation",
     palette: ["#4f3c2f", "#c5a572", "#8a6f57"],
   },
   RENAISSANCE: {
@@ -74,14 +74,14 @@ export const STYLE_DEFINITIONS: Record<PortraitStyle, StyleDefinition> = {
     label: "Pencil Sketch",
     shortDescription: "Hyper-detailed graphite portrait with soulful eyes.",
     guidance:
-      "A detailed pencil or charcoal sketch on cream paper with realistic fur texture, emphasis on expressive eyes, and minimal background.",
+      "A detailed pencil or charcoal sketch on cream paper with realistic fur texture, expressive eyes, and minimal background. Since this is a detail-oriented style, pay extra attention to accurately reproducing the pet's exact ear shape, ear position, facial structure, and markings from the reference photos.",
     emotionalTone: "quiet, intimate, and timeless",
-    composition: "close portrait with strong eye contact and elegant paper margins",
+    composition: "close portrait with strong eye contact and elegant paper margins, faithfully capturing the pet's natural ear position and head shape",
     background: "minimal cream paper with little to no scenery",
     lighting: "soft studio light translated into graphite depth and texture",
     textTreatment: "if memorial text is used, keep it understated like an artist inscription",
     negativeGuidance:
-      "avoid full-color rendering, noisy sketch marks, busy scenes, decorative clutter, and exaggerated cartoon eyes",
+      "avoid full-color rendering, noisy sketch marks, busy scenes, decorative clutter, exaggerated cartoon eyes, and altering ear position or face shape from the reference photos",
     palette: ["#f0ece4", "#80766a", "#3d3d3d"],
   },
   POP_ART: {
@@ -116,14 +116,14 @@ export const STYLE_DEFINITIONS: Record<PortraitStyle, StyleDefinition> = {
     label: "Impressionist",
     shortDescription: "Sunlit, nostalgic, and painterly.",
     guidance:
-      "A Monet-inspired impressionist portrait with loose brushstrokes, dappled light, a meadow or garden setting, and warm nostalgic color.",
+      "A Monet-inspired impressionist portrait with painterly brushstrokes, dappled light, a meadow or garden setting, and warm nostalgic color. Apply impressionist looseness to the background, lighting, and color blending — but keep the pet's structural anatomy (ear position, face shape, body proportions) accurate to the reference photos. The pet should be the sharpest element in the composition.",
     emotionalTone: "warm, nostalgic, and life-affirming",
-    composition: "pet in a lively natural setting with painterly movement",
-    background: "garden or meadow with soft floral and landscape suggestion",
-    lighting: "dappled sunlight with lively brushstroke transitions",
+    composition: "pet as the clear focal point in a natural setting, with the pet's anatomy rendered more precisely than the surrounding environment",
+    background: "garden or meadow with soft floral and landscape suggestion, painted loosely",
+    lighting: "dappled sunlight with warm brushstroke transitions",
     textTreatment: "if memorial text is used, keep it delicate and secondary to the painting",
     negativeGuidance:
-      "avoid hard realism, sharp digital edges, over-defined backgrounds, gloomy palettes, and visual clutter",
+      "avoid altering the pet's ear shape or face structure for artistic effect, avoid sharp digital edges, over-defined backgrounds, gloomy palettes, and visual clutter",
     palette: ["#a8dadc", "#f1faee", "#e9c46a"],
   },
   ANIME: {
