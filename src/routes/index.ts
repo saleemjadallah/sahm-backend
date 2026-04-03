@@ -7,7 +7,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
 import {
   getPackageStyles, PACKAGE_PRICING, ALL_STYLES,
-  ADDON_PORTRAIT_STYLES, ADDON_CATALOG,
+  ADDON_PORTRAIT_STYLES, ADDON_CATALOG, ADDON_PORTRAIT_PRICE_CENTS,
+  getUnitPrice,
   type AddOnType,
 } from "../lib/catalog.js";
 import { getSelectedOrderPricing } from "../lib/order-pricing.js";
@@ -736,18 +737,90 @@ export function registerRoutes(app: FastifyInstance) {
 
     const priceId = getPriceIdForPackage(order.packageType);
 
-    // Build a description that includes add-on labels
+    // Build itemized line items for CUSTOM orders
     const orderAddOns = await prisma.orderAddOn.findMany({ where: { orderId: order.id } });
-    const addOnPortraits = order.portraitCount
-      ? await prisma.portrait.findMany({
-          where: { orderId: order.id, selected: true, style: { in: ADDON_PORTRAIT_STYLES } },
-        })
-      : [];
-    const addOnLabels = [
-      ...addOnPortraits.map((p) => `"Young Again" Portrait`),
-      ...orderAddOns.map((a) => ADDON_CATALOG[a.type as AddOnType].label),
-    ];
-    const addOnSuffix = addOnLabels.length ? ` + ${addOnLabels.join(", ")}` : "";
+    const selectedPortraits = await prisma.portrait.findMany({
+      where: { orderId: order.id, selected: true },
+    });
+    const addOnStyleSet = new Set<string>(ADDON_PORTRAIT_STYLES);
+    const standardCount = selectedPortraits.filter((p) => !addOnStyleSet.has(p.style)).length;
+    const addOnPortraitCount = selectedPortraits.filter((p) => addOnStyleSet.has(p.style)).length;
+
+    let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
+    let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
+
+    if (priceId) {
+      // Legacy package flow
+      lineItems = [{ price: priceId, quantity: 1 }];
+    } else {
+      // New CUSTOM flow — itemized line items
+      const productData = (name: string) => ({ name: `${name} — ${order.petName}` });
+      const withProduct = (productEnv: string, name: string) =>
+        productEnv ? { product: productEnv } : { product_data: productData(name) };
+
+      lineItems = [];
+
+      if (standardCount > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            ...withProduct(env.STRIPE_PRODUCT_PORTRAITS, "Memorial Portrait"),
+            unit_amount: getUnitPrice(standardCount),
+          },
+          quantity: standardCount,
+        });
+      }
+
+      if (addOnPortraitCount > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            ...withProduct(env.STRIPE_PRODUCT_YOUNG_AGAIN, "Young Again Portrait"),
+            unit_amount: ADDON_PORTRAIT_PRICE_CENTS,
+          },
+          quantity: addOnPortraitCount,
+        });
+      }
+
+      for (const addOn of orderAddOns) {
+        const catalog = ADDON_CATALOG[addOn.type as AddOnType];
+        const productEnvMap: Record<string, string> = {
+          LETTER_FROM_HEAVEN: env.STRIPE_PRODUCT_LETTER,
+          STORYBOOK: env.STRIPE_PRODUCT_STORYBOOK,
+        };
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            ...withProduct(productEnvMap[addOn.type] ?? "", catalog.label),
+            unit_amount: catalog.priceCents,
+          },
+          quantity: 1,
+        });
+      }
+
+      // Handle promo code discount via Stripe coupon
+      if (order.discountAmount && order.discountAmount > 0 && stripe) {
+        const coupon = await stripe.coupons.create({
+          amount_off: order.discountAmount,
+          currency: "usd",
+          name: order.promoCode ? `Promo: ${order.promoCode}` : "Discount",
+          duration: "once",
+        });
+        discounts = [{ coupon: coupon.id }];
+      }
+
+      // Fallback: if no line items somehow, use single lump sum
+      if (lineItems.length === 0) {
+        lineItems = [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Memorial Portraits for ${order.petName}` },
+            unit_amount: order.amount,
+          },
+          quantity: 1,
+        }];
+      }
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -758,22 +831,8 @@ export function registerRoutes(app: FastifyInstance) {
         orderId: order.id,
         userId: user.id,
       },
-      line_items: priceId
-        ? [{ price: priceId, quantity: 1 }]
-        : [
-            {
-              price_data: {
-                currency: "usd",
-                product_data: {
-                  name: order.packageType === PackageType.CUSTOM
-                    ? `${order.portraitCount ?? 1} Memorial Portrait${(order.portraitCount ?? 1) > 1 ? "s" : ""} for ${order.petName}${addOnSuffix}`
-                    : `${PACKAGE_PRICING[order.packageType]?.label ?? "Portraits"} for ${order.petName}`,
-                },
-                unit_amount: order.amount,
-              },
-              quantity: 1,
-            },
-          ],
+      line_items: lineItems,
+      ...(discounts ? { discounts } : {}),
     });
 
     await prisma.order.update({
