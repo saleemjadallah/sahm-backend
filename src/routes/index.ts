@@ -111,6 +111,8 @@ function serializeOrder<T extends {
     priceCents: number;
     documentUrl: string | null;
     documentKey: string | null;
+    videoUrl: string | null;
+    videoKey: string | null;
     previewUrl: string | null;
     previewKey: string | null;
     generatedText: string | null;
@@ -134,6 +136,8 @@ function serializeOrder<T extends {
       ...addOn,
       documentUrl: isPaid ? addOn.documentUrl : null,
       documentKey: isPaid ? addOn.documentKey : null,
+      videoUrl: isPaid ? addOn.videoUrl : null,
+      videoKey: isPaid ? addOn.videoKey : null,
       generatedText: isPaid ? addOn.generatedText : null,
     })),
   };
@@ -249,6 +253,7 @@ export function registerRoutes(app: FastifyInstance) {
     const body = request.body as {
       name: string;
       type?: "DOG" | "CAT" | "OTHER";
+      gender?: "MALE" | "FEMALE";
       breed?: string;
       description?: string;
       personalityTraits?: string[];
@@ -267,6 +272,7 @@ export function registerRoutes(app: FastifyInstance) {
         userId: user.id,
         name: body.name.trim(),
         type: (body.type as PetType | undefined) ?? PetType.DOG,
+        gender: body.gender ?? null,
         breed: body.breed?.trim() || null,
         description: body.description?.trim() || null,
         personalityTraits: body.personalityTraits ?? [],
@@ -1080,6 +1086,11 @@ export function registerRoutes(app: FastifyInstance) {
         const name = addOn.type === "LETTER_FROM_HEAVEN" ? "letter-from-heaven.pdf" : "storybook.pdf";
         archive.append(doc, { name });
       }
+      if (addOn.videoKey) {
+        const video = await getObjectBuffer(addOn.videoKey);
+        const name = addOn.type === "LETTER_FROM_HEAVEN" ? "letter-from-heaven.mp4" : "storybook.mp4";
+        archive.append(video, { name });
+      }
     }
 
     archive.append(createPrintGuidePdf(order.petName), { name: "print-guide.pdf" });
@@ -1117,6 +1128,39 @@ export function registerRoutes(app: FastifyInstance) {
       "Content-Disposition",
       `${ext === "pdf" ? "inline" : "attachment"}; filename="${normalizeFilename(order.petName, "pet")}-${label}.${ext}"`,
     );
+    return reply.send(buffer);
+  });
+
+  // Add-on video endpoint
+  app.get("/api/orders/:orderId/addons/:addOnId/video", async (request, reply) => {
+    const user = requireUser(request);
+    const { orderId, addOnId } = request.params as { orderId: string; addOnId: string };
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, userId: user.id },
+    });
+
+    if (!order) throw createError(404, "Order not found.");
+    if (!orderIsPaid(order)) throw createError(402, "Payment is required.");
+
+    const addOn = await prisma.orderAddOn.findFirst({
+      where: { id: addOnId, orderId },
+    });
+
+    if (!addOn) throw createError(404, "Add-on not found.");
+    if (!addOn.videoKey) {
+      throw createError(404, "Video is not available.");
+    }
+
+    const buffer = await getObjectBuffer(addOn.videoKey);
+    const label = addOn.type === "LETTER_FROM_HEAVEN" ? "letter-from-heaven" : "storybook";
+
+    reply.header("Content-Type", "video/mp4");
+    reply.header(
+      "Content-Disposition",
+      `inline; filename="${normalizeFilename(order.petName, "pet")}-${label}.mp4"`,
+    );
+    reply.header("Content-Length", buffer.length);
     return reply.send(buffer);
   });
 

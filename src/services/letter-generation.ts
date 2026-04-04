@@ -149,9 +149,45 @@ export async function generateLetter(orderId: string, addOnId: string) {
     memorialText: addOn.order.petMemorialText,
   });
 
-  // Upload to R2
+  // Upload PDF to R2
   const pdfKey = `addons/${orderId}/${addOnId}/letter.pdf`;
   const uploaded = await uploadBuffer(pdfKey, pdfBuffer, "application/pdf");
+
+  // -- Generate video memorial (TTS + Remotion) --
+  // Non-fatal: if video fails, the PDF is still delivered
+  let videoUrl: string | null = null;
+  let videoKey: string | null = null;
+
+  try {
+    const { isTtsConfigured, generateNarration } = await import("./tts.js");
+
+    if (isTtsConfigured()) {
+      console.log(`[letter] Generating TTS narration for order ${orderId}...`);
+      const { audioBuffer: narrationBuffer, durationSeconds: narrationDurationS } =
+        await generateNarration(letterText, pet.gender);
+      console.log(`[letter] Narration: ${narrationDurationS.toFixed(1)}s`);
+
+      console.log(`[letter] Rendering video for order ${orderId}...`);
+      const { renderLetterVideo } = await import("./video-generation.js");
+      const videoBuffer = await renderLetterVideo({
+        letterText,
+        petName: pet.name,
+        memorialText: addOn.order.petMemorialText,
+        portraitImageBuffer: portraitImageBuffer!,
+        narrationBuffer,
+        narrationDurationS,
+      });
+
+      const vKey = `addons/${orderId}/${addOnId}/letter-video.mp4`;
+      const videoUploaded = await uploadBuffer(vKey, videoBuffer, "video/mp4");
+      videoUrl = videoUploaded.url;
+      videoKey = videoUploaded.key;
+      console.log(`[letter] Video uploaded for order ${orderId}`);
+    }
+  } catch (error) {
+    console.error(`[letter] Video generation failed for order ${orderId}:`, error);
+    // Continue — PDF is the primary deliverable
+  }
 
   // Update the add-on record
   await prisma.orderAddOn.update({
@@ -161,6 +197,8 @@ export async function generateLetter(orderId: string, addOnId: string) {
       generatedText: letterText,
       documentUrl: uploaded.url,
       documentKey: uploaded.key,
+      videoUrl,
+      videoKey,
     },
   });
 }

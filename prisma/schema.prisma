@@ -26,6 +26,7 @@ model Pet {
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
   type              PetType   @default(DOG)
+  gender            PetGender?
   breed             String?
   description       String?
   personalityTraits String[]  @default([])
@@ -46,6 +47,11 @@ enum PetType {
   DOG
   CAT
   OTHER
+}
+
+enum PetGender {
+  MALE
+  FEMALE
 }
 
 model PetPhoto {
@@ -202,6 +208,8 @@ model OrderAddOn {
   priceCents    Int
   documentUrl   String?
   documentKey   String?
+  videoUrl      String?
+  videoKey      String?
   previewUrl    String?
   previewKey    String?
   generatedText String?

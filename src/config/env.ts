@@ -33,6 +33,7 @@ export const env = cleanEnv(process.env, {
   STRIPE_PRODUCT_CANVAS: str({ default: "" }),
   STRIPE_PRODUCT_FRAMED_CANVAS: str({ default: "" }),
   STRIPE_PRODUCT_SHIPPING: str({ default: "" }),
+  GOOGLE_CREDENTIALS_JSON: str({ default: "" }),
   RESEND_API_KEY: str({ default: "" }),
   RESEND_FROM_EMAIL: str({ default: "hello@getsahm.com" }),
   JWT_SECRET: str({ default: "replace-me" }),
