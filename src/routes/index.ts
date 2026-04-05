@@ -1011,7 +1011,14 @@ export function registerRoutes(app: FastifyInstance) {
   app.get("/api/orders/:orderId/portraits/:id/download", async (request, reply) => {
     const user = requireUser(request);
     const { orderId, id } = request.params as { orderId: string; id: string };
-    const variant = ((request.query as { variant?: string }).variant ?? "full").toLowerCase();
+    const query = request.query as { variant?: string; format?: string };
+    const variant = (query.variant ?? "full").toLowerCase();
+    const format = (query.format ?? "png").toLowerCase();
+
+    if (!["png", "jpeg", "tiff"].includes(format)) {
+      throw createError(400, "Unsupported format. Use png, jpeg, or tiff.");
+    }
+
     const portrait = await prisma.portrait.findFirst({
       where: {
         id,
@@ -1026,6 +1033,7 @@ export function registerRoutes(app: FastifyInstance) {
             stripePaymentId: true,
             status: true,
             packageType: true,
+            petName: true,
           },
         },
       },
@@ -1043,14 +1051,54 @@ export function registerRoutes(app: FastifyInstance) {
       throw createError(403, "This portrait was not included in your order.");
     }
 
-    const url =
-      variant === "preview" ? portrait.previewUrl : variant === "print" ? portrait.printReadyUrl : portrait.fullUrl;
+    const storageKey =
+      variant === "preview" ? portrait.previewKey : variant === "print" ? portrait.printReadyKey : portrait.fullKey;
 
-    if (!url) {
+    if (!storageKey) {
       throw createError(400, "Requested file is not available yet.");
     }
 
-    return reply.redirect(url);
+    const sourceBuffer = await getObjectBuffer(storageKey);
+
+    const petSlug = normalizeFilename(portrait.order.petName, "portrait");
+    const styleSlug = portrait.style.toLowerCase().replace(/_/g, "-");
+    const variantLabel = variant === "print" ? "print-ready" : variant;
+
+    const mimeTypes: Record<string, string> = {
+      png: "image/png",
+      jpeg: "image/jpeg",
+      tiff: "image/tiff",
+    };
+    const extensions: Record<string, string> = {
+      png: "png",
+      jpeg: "jpg",
+      tiff: "tiff",
+    };
+
+    let outputBuffer: Buffer;
+    const pipeline = sharp(sourceBuffer);
+
+    if (format === "jpeg") {
+      outputBuffer = await pipeline.jpeg({ quality: 95, mozjpeg: true }).toBuffer();
+    } else if (format === "tiff") {
+      // TIFF at 300 DPI — the standard for professional print shops
+      outputBuffer = await pipeline
+        .withMetadata({ density: 300 })
+        .tiff({ compression: "lzw" })
+        .toBuffer();
+    } else {
+      // PNG — lossless, same as stored
+      outputBuffer = sourceBuffer;
+    }
+
+    const filename = `${petSlug}-${styleSlug}-${variantLabel}.${extensions[format]}`;
+
+    reply.header("Content-Type", mimeTypes[format]);
+    reply.header("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    reply.header("Content-Length", outputBuffer.length);
+    reply.header("Cache-Control", "private, max-age=3600");
+
+    return reply.send(outputBuffer);
   });
 
   app.get("/api/orders/:orderId/download-all", async (request, reply) => {
@@ -1079,7 +1127,7 @@ export function registerRoutes(app: FastifyInstance) {
       `attachment; filename="${normalizeFilename(order.petName, order.petName)}-portraits.zip"`,
     );
 
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = archiver("zip", { zlib: { level: 1 } });
     archive.on("error", (error: Error) => {
       throw error;
     });
@@ -1088,13 +1136,22 @@ export function registerRoutes(app: FastifyInstance) {
     const isCustom = order.packageType === PackageType.CUSTOM;
     for (const portrait of order.portraits) {
       if (isCustom && !portrait.selected) continue;
+      const styleSlug = portrait.style.toLowerCase().replace(/_/g, "-");
       if (portrait.fullKey) {
         const full = await getObjectBuffer(portrait.fullKey);
-        archive.append(full, { name: `${portrait.style.toLowerCase()}-full.png` });
+        // PNG — lossless high-quality digital file
+        archive.append(full, { name: `${styleSlug}-full.png` });
+        // JPEG — smaller file for sharing & social media
+        const jpegBuf = await sharp(full).jpeg({ quality: 95, mozjpeg: true }).toBuffer();
+        archive.append(jpegBuf, { name: `${styleSlug}-share.jpg` });
       }
       if (portrait.printReadyKey) {
         const print = await getObjectBuffer(portrait.printReadyKey);
-        archive.append(print, { name: `${portrait.style.toLowerCase()}-print-ready.png` });
+        // PNG print-ready with 300 DPI metadata
+        archive.append(print, { name: `${styleSlug}-print-ready.png` });
+        // TIFF — professional print shop format, 300 DPI, LZW compressed
+        const tiffBuf = await sharp(print).withMetadata({ density: 300 }).tiff({ compression: "lzw" }).toBuffer();
+        archive.append(tiffBuf, { name: `${styleSlug}-print-ready.tiff` });
       }
     }
 
@@ -1145,11 +1202,10 @@ export function registerRoutes(app: FastifyInstance) {
     const ext = addOn.documentKey.endsWith(".pdf") ? "pdf" : "png";
     const label = addOn.type === "LETTER_FROM_HEAVEN" ? "letter-from-heaven" : "storybook";
 
+    const filename = `${normalizeFilename(order.petName, "pet")}-${label}.${ext}`;
     reply.header("Content-Type", ext === "pdf" ? "application/pdf" : "image/png");
-    reply.header(
-      "Content-Disposition",
-      `${ext === "pdf" ? "inline" : "attachment"}; filename="${normalizeFilename(order.petName, "pet")}-${label}.${ext}"`,
-    );
+    reply.header("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    reply.header("Content-Length", buffer.length);
     return reply.send(buffer);
   });
 
@@ -1177,11 +1233,9 @@ export function registerRoutes(app: FastifyInstance) {
     const buffer = await getObjectBuffer(addOn.videoKey);
     const label = addOn.type === "LETTER_FROM_HEAVEN" ? "letter-from-heaven" : "storybook";
 
+    const filename = `${normalizeFilename(order.petName, "pet")}-${label}.mp4`;
     reply.header("Content-Type", "video/mp4");
-    reply.header(
-      "Content-Disposition",
-      `inline; filename="${normalizeFilename(order.petName, "pet")}-${label}.mp4"`,
-    );
+    reply.header("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     reply.header("Content-Length", buffer.length);
     return reply.send(buffer);
   });
