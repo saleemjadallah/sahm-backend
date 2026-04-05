@@ -37,6 +37,7 @@ export const env = cleanEnv(process.env, {
   RESEND_API_KEY: str({ default: "" }),
   RESEND_FROM_EMAIL: str({ default: "hello@getsahm.com" }),
   JWT_SECRET: str({ default: "replace-me" }),
+  PRINTFUL_SECRET_KEY: str({ default: "" }),
   PRINTFUL_API_TOKEN: str({ default: "" }),
   PRINTFUL_WEBHOOK_SECRET: str({ default: "" }),
   META_PIXEL_ID: str({ default: "" }),

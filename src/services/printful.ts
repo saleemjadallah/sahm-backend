@@ -3,6 +3,7 @@
 import { env } from "../config/env.js";
 
 const BASE_URL = "https://api.printful.com";
+const printfulApiToken = env.PRINTFUL_API_TOKEN || env.PRINTFUL_SECRET_KEY;
 
 interface PrintfulRecipient {
   name: string;
@@ -38,14 +39,14 @@ async function printfulFetch<T = unknown>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  if (!env.PRINTFUL_API_TOKEN) {
+  if (!printfulApiToken) {
     throw new Error("Printful API token is not configured.");
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method: options.method ?? "GET",
     headers: {
-      Authorization: `Bearer ${env.PRINTFUL_API_TOKEN}`,
+      Authorization: `Bearer ${printfulApiToken}`,
       "Content-Type": "application/json",
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -133,5 +134,5 @@ export async function estimateOrderCosts(order: PrintfulCreateOrder) {
 
 /** Check if Printful is configured and available. */
 export function isPrintfulConfigured() {
-  return Boolean(env.PRINTFUL_API_TOKEN);
+  return Boolean(printfulApiToken);
 }
