@@ -24,6 +24,7 @@ import { stripe } from "../lib/stripe.js";
 import { customOrderNeedsPostPaymentFulfillment, handlePaidOrder, startPostPaymentGeneration } from "../services/generation.js";
 import { isPrintfulConfigured, estimateShipping } from "../services/printful.js";
 import { submitPaidPrintOrder } from "../services/printful-orders.js";
+import { sendPurchaseEvent } from "../services/meta-capi.js";
 
 function requireUser(request: FastifyRequest) {
   if (!request.authUser) {
@@ -960,6 +961,27 @@ export function registerRoutes(app: FastifyInstance) {
         const orderId = session.metadata?.orderId;
         if (orderId) {
           await handlePaidOrder(orderId, paymentIntent, session.id);
+
+          // Fire Meta Conversions API Purchase event (non-blocking)
+          const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: { user: true, portraits: { where: { selected: true } }, addOns: true },
+          });
+          if (order) {
+            void sendPurchaseEvent({
+              eventId: order.id,
+              value: (session.amount_total ?? order.amount) / 100,
+              currency: (session.currency ?? "usd").toUpperCase(),
+              contentName: `${order.petName} memorial portraits`,
+              contentIds: order.portraits.map((p) => p.style),
+              numItems: order.portraits.length + order.addOns.length,
+              userData: {
+                em: order.user.email || session.customer_email || undefined,
+                fn: order.user.name || undefined,
+              },
+              eventSourceUrl: `${env.FRONTEND_URL}/order/${order.id}`,
+            });
+          }
         }
       }
 

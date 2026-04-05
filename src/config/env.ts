@@ -39,6 +39,8 @@ export const env = cleanEnv(process.env, {
   JWT_SECRET: str({ default: "replace-me" }),
   PRINTFUL_API_TOKEN: str({ default: "" }),
   PRINTFUL_WEBHOOK_SECRET: str({ default: "" }),
+  META_PIXEL_ID: str({ default: "" }),
+  META_CAPI_ACCESS_TOKEN: str({ default: "" }),
 });
 
 export const isProduction = env.NODE_ENV === "production";
